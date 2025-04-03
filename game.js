@@ -1930,6 +1930,62 @@ function init() {
     initializeStars();
 }
 
+// Object to track pressed keys
+const keys = {
+    up: false,
+    left: false,
+    right: false,
+    space: false
+};
+
+// Handle keydown events for game controls
+function handleKeyDown(e) {
+    // Prevent default behavior for arrow keys to avoid page scrolling
+    if ([32, 37, 38, 39, 40].indexOf(e.keyCode) > -1) {
+        e.preventDefault();
+    }
+    
+    // Update keys based on keyCode
+    switch(e.keyCode) {
+        case 32: // Spacebar
+            keys.space = true;
+            break;
+        case 37: // Left arrow
+        case 65: // A key
+            keys.left = true;
+            break;
+        case 38: // Up arrow
+        case 87: // W key
+            keys.up = true;
+            break;
+        case 39: // Right arrow
+        case 68: // D key
+            keys.right = true;
+            break;
+    }
+}
+
+// Handle keyup events for game controls
+function handleKeyUp(e) {
+    switch(e.keyCode) {
+        case 32: // Spacebar
+            keys.space = false;
+            break;
+        case 37: // Left arrow
+        case 65: // A key
+            keys.left = false;
+            break;
+        case 38: // Up arrow
+        case 87: // W key
+            keys.up = false;
+            break;
+        case 39: // Right arrow
+        case 68: // D key
+            keys.right = false;
+            break;
+    }
+}
+
 // Setup all event listeners for game controls and UI interactions
 function setupEventListeners() {
     // Keyboard controls
