@@ -199,19 +199,20 @@ let offscreenCanvas = null;
 let offscreenCtx = null;
 let asteroidBuffers = {}; // Pre-rendered asteroid graphics
 
-// Initialize Firebase
+// Enhance Firebase error handling
 function setupFirebase() {
     try {
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
-        
+
         // Initialize Firestore
         db = firebase.firestore();
-        
+
         // Load high scores initially
         loadHighScores();
     } catch (error) {
         console.error("Error initializing Firebase:", error);
+        alert("Failed to connect to Firebase. High scores will not be saved.");
     }
 }
 
@@ -2105,28 +2106,28 @@ function createShip() {
     };
 }
 
-// Create a new asteroid
-function createAsteroid(x, y, size) {
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
     let asteroid = {
         x: x || Math.random() * canvas.width,
         y: y || Math.random() * canvas.height,
-        xv: (Math.random() * ASTEROID_SPEED / FPS) * (Math.random() < 0.5 ? 1 : -1),
-        yv: (Math.random() * ASTEROID_SPEED / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
         radius: size / 2,
         angle: Math.random() * Math.PI * 2, // in radians
         vert: Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2),
         offs: []
     };
     
-    // Create the vertex offsets array
+    // Create the vertex offsets array with increased jaggedness
     for (let i = 0; i < asteroid.vert; i++) {
-        asteroid.offs.push(Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG);
+        asteroid.offs.push((Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG) * jaggednessMultiplier);
     }
     
     return asteroid;
 }
 
-// Create asteroids for a new level
+// Enhance level progression by increasing asteroid speed and jaggedness
 function createAsteroids() {
     asteroids = [];
     let x, y;
@@ -2143,7 +2144,11 @@ function createAsteroids() {
             distBetweenPoints(ship.x, ship.y, x, y) < ASTEROID_SIZE * 2
         );
         
-        asteroids.push(createAsteroid(x, y, ASTEROID_SIZE));
+        // Increase asteroid speed and jaggedness with level
+        const speedMultiplier = 1 + level * 0.1;
+        const jaggednessMultiplier = 1 + level * 0.05;
+        
+        asteroids.push(createAsteroid(x, y, ASTEROID_SIZE, speedMultiplier, jaggednessMultiplier));
     }
     
     // Play level up sound if not the first level
