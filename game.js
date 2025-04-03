@@ -1930,5 +1930,79 @@ function init() {
     initializeStars();
 }
 
+// Setup all event listeners for game controls and UI interactions
+function setupEventListeners() {
+    // Keyboard controls
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    // Mobile controls
+    document.getElementById('thrustButton').addEventListener('touchstart', () => {
+        keys.up = true;
+    });
+    document.getElementById('thrustButton').addEventListener('touchend', () => {
+        keys.up = false;
+    });
+    
+    document.getElementById('leftButton').addEventListener('touchstart', () => {
+        keys.left = true;
+    });
+    document.getElementById('leftButton').addEventListener('touchend', () => {
+        keys.left = false;
+    });
+    
+    document.getElementById('rightButton').addEventListener('touchstart', () => {
+        keys.right = true;
+    });
+    document.getElementById('rightButton').addEventListener('touchend', () => {
+        keys.right = false;
+    });
+    
+    document.getElementById('fireButton').addEventListener('touchstart', () => {
+        keys.space = true;
+    });
+    document.getElementById('fireButton').addEventListener('touchend', () => {
+        keys.space = false;
+    });
+    
+    // Style toggle
+    document.getElementById('styleToggle').addEventListener('change', (e) => {
+        modernStyle = e.target.checked;
+    });
+    
+    // Sound controls
+    document.getElementById('soundToggle').addEventListener('click', toggleSound);
+    document.getElementById('musicToggle').addEventListener('click', toggleMusic);
+    
+    // Game over modal
+    document.getElementById('restartButton').addEventListener('click', restartGame);
+    document.getElementById('viewHighScores').addEventListener('click', showHighScores);
+    document.getElementById('submitScore').addEventListener('click', submitHighScore);
+    
+    // Start screen
+    document.getElementById('startButton').addEventListener('click', startGame);
+    document.getElementById('startHighScores').addEventListener('click', showHighScores);
+    document.getElementById('startStyleToggle').addEventListener('change', (e) => {
+        modernStyle = e.target.checked;
+        document.getElementById('styleToggle').checked = modernStyle;
+    });
+    document.getElementById('startSoundToggle').addEventListener('change', (e) => {
+        soundEnabled = e.target.checked;
+        updateSoundButton();
+    });
+    document.getElementById('startMusicToggle').addEventListener('change', (e) => {
+        musicEnabled = e.target.checked;
+        updateMusicButton();
+        if (musicEnabled) {
+            playBackgroundMusic();
+        } else {
+            stopBackgroundMusic();
+        }
+    });
+    
+    // High scores modal
+    document.getElementById('closeHighScores').addEventListener('click', closeHighScores);
+}
+
 // Start the game when the page loads
 window.onload = init;
