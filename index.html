@@ -6,17 +6,20 @@
     <title>Asteroids Game</title>
     <link rel="stylesheet" href="styles.css">
     <!-- Firebase SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore-compat.js" defer></script>
 </head>
 <body>
-    <div class="game-container">
-        <canvas id="gameCanvas"></canvas>
-        <div id="mobileControls" class="mobile-controls">
-            <div class="control-button" id="thrustButton">THRUST</div>
-            <div class="control-button" id="leftButton">LEFT</div>
-            <div class="control-button" id="rightButton">RIGHT</div>
-            <div class="control-button" id="fireButton">FIRE</div>
+    <noscript>
+        <p style="color: red; text-align: center;">This game requires JavaScript to run. Please enable JavaScript in your browser settings.</p>
+    </noscript>
+    <div class="game-container" role="main" aria-label="Asteroids Game">
+        <canvas id="gameCanvas" aria-label="Game Canvas"></canvas>
+        <div id="mobileControls" class="mobile-controls" aria-label="Mobile Controls">
+            <div class="control-button" id="thrustButton" aria-label="Thrust Button">THRUST</div>
+            <div class="control-button" id="leftButton" aria-label="Left Button">LEFT</div>
+            <div class="control-button" id="rightButton" aria-label="Right Button">RIGHT</div>
+            <div class="control-button" id="fireButton" aria-label="Fire Button">FIRE</div>
         </div>
         <div class="score-container">
             <div>Score: <span id="score">0</span></div>

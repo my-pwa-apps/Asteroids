@@ -28,6 +28,23 @@ const MUSIC_ON = true; // turn music on or off
 const HIGH_SCORES_COUNT = 10; // number of high scores to save and display
 const USE_REQUEST_ANIMATION_FRAME = true; // use requestAnimationFrame for smoother rendering
 
+// Level progression constants
+const INITIAL_ASTEROID_SIZE = 60; // Starting size for level 1 asteroids (smaller than default)
+const ASTEROID_SIZE_INCREMENT = 5; // Size increase per level
+const MAX_ASTEROID_SIZE = 120; // Maximum asteroid size
+
+// Powerup constants
+const POWERUP_SIZE = 20; // Size of powerups in pixels
+const POWERUP_SPEED = 30; // Speed of powerups in pixels per second
+const POWERUP_DURATION = 5; // Duration of powerups in seconds
+const POWERUP_PROBABILITY = 0.2; // Probability (0-1) of asteroid dropping a powerup
+const POWERUP_TYPES = {
+    SHIELD: "shield",        // Temporary invulnerability
+    TRIPLE_SHOT: "tripleShot", // Three lasers at once
+    RAPID_FIRE: "rapidFire",  // Faster shooting
+    EXTRA_LIFE: "extraLife"   // +1 life
+};
+
 // Firebase configuration
 const firebaseConfig = {
     apiKey: "AIzaSyAC44w0jgxbGNiJo06mzZ19feHk0aIEaqY",
@@ -58,6 +75,8 @@ let canvas, ctx;
 let ship;
 let asteroids = [];
 let lasers = [];
+let powerups = []; // Array to hold active powerups
+let activePowerups = {}; // Object to track active powerup effects
 let score = 0;
 let level = 0;
 let lives = GAME_LIVES;
@@ -68,6 +87,7 @@ let isModernStyle = false;
 // DOM elements
 const scoreElement = document.getElementById("score");
 const livesElement = document.getElementById("lives");
+const levelElement = document.getElementById("level");
 const finalScoreElement = document.getElementById("finalScore");
 const gameOverModal = document.getElementById("gameOverModal");
 const restartButton = document.getElementById("restartButton");
@@ -1370,6 +1390,9 @@ function update() {
     if (isModernStyle && PARTICLES.enabled) {
         updateParticles();
     }
+    
+    // Update powerups
+    updatePowerups();
 }
 
 // Destroy an asteroid and create smaller ones
@@ -1435,6 +1458,11 @@ function destroyAsteroid(index) {
     
     // Remove the original asteroid
     asteroids.splice(index, 1);
+    
+    // Randomly drop a powerup
+    if (Math.random() < POWERUP_PROBABILITY) {
+        powerups.push(createPowerup(asteroid.x, asteroid.y));
+    }
 }
 
 // Draw the game
@@ -1536,6 +1564,9 @@ function draw() {
     
     // Draw the lasers
     drawLasers();
+    
+    // Draw the powerups
+    drawPowerups();
 }
 
 // Particle system
@@ -2134,13 +2165,23 @@ function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 
     return asteroid;
 }
 
-// Enhance level progression by increasing asteroid speed and jaggedness
+// Enhance level progression by increasing asteroid size, speed and jaggedness
 function createAsteroids() {
     asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
     let x, y;
     
     // Calculate number of asteroids based on level
     const numAsteroids = ASTEROID_NUM + level;
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display
+    levelElement.textContent = level + 1; // Display level starting from 1 instead of 0
     
     for (let i = 0; i < numAsteroids; i++) {
         do {
@@ -2148,14 +2189,14 @@ function createAsteroids() {
             y = Math.random() * canvas.height;
         } while (
             // Ensure asteroids don't spawn too close to the ship
-            distBetweenPoints(ship.x, ship.y, x, y) < ASTEROID_SIZE * 2
+            distBetweenPoints(ship.x, ship.y, x, y) < currentAsteroidSize * 2
         );
         
         // Increase asteroid speed and jaggedness with level
         const speedMultiplier = 1 + level * 0.1;
         const jaggednessMultiplier = 1 + level * 0.05;
         
-        asteroids.push(createAsteroid(x, y, ASTEROID_SIZE, speedMultiplier, jaggednessMultiplier));
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
     }
     
     // Play level up sound if not the first level
@@ -2166,7 +2207,7 @@ function createAsteroids() {
 
 // Calculate distance between two points
 function distBetweenPoints(x1, y1, x2, y2) {
-    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
 }
 
 // Draw the ship
@@ -2307,19 +2348,68 @@ function drawShip(x, y, angle) {
 function shootLaser() {
     // Check if we can shoot more lasers
     if (lasers.length < LASER_MAX) {
-        // Add a laser
-        lasers.push({
-            x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
-            y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
-            xv: LASER_SPEED * Math.cos(ship.angle) / FPS,
-            yv: -LASER_SPEED * Math.sin(ship.angle) / FPS,
-            dist: 0,
-            explodeTime: 0
-        });
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
         
         // Play laser sound
         if (soundEnabled && sounds.laser) {
             sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
         }
     }
 }
@@ -2432,4 +2522,234 @@ function playBackgroundMusic() {
 // Stop background music
 function stopBackgroundMusic() {
     stopMusicLoop();
+}
+
+// Create a new powerup
+function createPowerup(x, y) {
+    // Randomly select powerup type
+    const types = Object.values(POWERUP_TYPES);
+    const type = types[Math.floor(Math.random() * types.length)];
+    
+    return {
+        x: x,
+        y: y,
+        xv: (Math.random() * POWERUP_SPEED / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * POWERUP_SPEED / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: POWERUP_SIZE / 2,
+        type: type,
+        duration: POWERUP_DURATION * FPS,
+        angle: 0,
+        rotation: Math.random() * 0.06 - 0.03
+    };
+}
+
+// Draw powerups
+function drawPowerups() {
+    ctx.lineWidth = SHIP_SIZE / 20;
+    
+    for (let i = 0; i < powerups.length; i++) {
+        const powerup = powerups[i];
+        
+        // Set color based on powerup type
+        let color, glowColor;
+        
+        if (powerup.type === POWERUP_TYPES.SHIELD) {
+            color = "rgba(0, 200, 255, 0.8)";
+            glowColor = "rgba(0, 150, 255, 0.5)";
+        } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
+            color = "rgba(255, 100, 255, 0.8)";
+            glowColor = "rgba(200, 0, 255, 0.5)";
+        } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
+            color = "rgba(255, 200, 0, 0.8)";
+            glowColor = "rgba(255, 150, 0, 0.5)";
+        } else {
+            color = "rgba(0, 255, 0, 0.8)";
+            glowColor = "rgba(0, 200, 0, 0.5)";
+        }
+
+        if (isModernStyle) {
+            // Modern style powerup
+            ctx.fillStyle = color;
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            
+            // Draw glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = glowColor;
+            
+            ctx.beginPath();
+            ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            
+            // Draw icon based on powerup type
+            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+            ctx.save();
+            ctx.translate(powerup.x, powerup.y);
+            ctx.rotate(powerup.angle);
+            
+            if (powerup.type === POWERUP_TYPES.SHIELD) {
+                // Shield icon
+                ctx.beginPath();
+                ctx.arc(0, 0, powerup.radius * 0.6, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
+                // Triple shot icon
+                ctx.beginPath();
+                ctx.moveTo(0, -powerup.radius * 0.5);
+                ctx.lineTo(-powerup.radius * 0.4, powerup.radius * 0.5);
+                ctx.lineTo(powerup.radius * 0.4, powerup.radius * 0.5);
+                ctx.closePath();
+                ctx.stroke();
+                
+                // Draw 3 small dots
+                const dotSize = powerup.radius * 0.15;
+                ctx.beginPath();
+                ctx.arc(-powerup.radius * 0.3, 0, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(0, 0, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(powerup.radius * 0.3, 0, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
+                // Rapid fire icon (lightning bolt)
+                ctx.beginPath();
+                ctx.moveTo(-powerup.radius * 0.2, -powerup.radius * 0.6);
+                ctx.lineTo(powerup.radius * 0.2, 0);
+                ctx.lineTo(-powerup.radius * 0.2, 0);
+                ctx.lineTo(powerup.radius * 0.2, powerup.radius * 0.6);
+                ctx.stroke();
+            } else {
+                // Extra life icon (heart)
+                const r = powerup.radius * 0.4;
+                ctx.beginPath();
+                ctx.moveTo(0, r * 0.8);
+                ctx.bezierCurveTo(r * 1.5, -r * 1.5, r * 3, 0, 0, r * 2);
+                ctx.bezierCurveTo(-r * 3, 0, -r * 1.5, -r * 1.5, 0, r * 0.8);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+            ctx.shadowBlur = 0;
+        } else {
+            // Retro style powerup
+            ctx.strokeStyle = "white";
+            
+            // Draw circle
+            ctx.beginPath();
+            ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Draw identifying letter based on powerup type
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "bold " + powerup.radius + "px Arial";
+            
+            let letter = "";
+            if (powerup.type === POWERUP_TYPES.SHIELD) {
+                letter = "S";
+            } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
+                letter = "T";
+            } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
+                letter = "R";
+            } else {
+                letter = "L";
+            }
+            
+            ctx.fillText(letter, powerup.x, powerup.y);
+        }
+    }
+}
+
+// Update powerups
+function updatePowerups() {
+    // Update existing powerup positions
+    for (let i = powerups.length - 1; i >= 0; i--) {
+        // Move the powerup
+        powerups[i].x += powerups[i].xv;
+        powerups[i].y += powerups[i].yv;
+        
+        // Update rotation for visual effect
+        powerups[i].angle += powerups[i].rotation;
+        
+        // Handle powerup going off screen with wrapping
+        if (powerups[i].x < 0 - powerups[i].radius) {
+            powerups[i].x = canvas.width + powerups[i].radius;
+        } else if (powerups[i].x > canvas.width + powerups[i].radius) {
+            powerups[i].x = 0 - powerups[i].radius;
+        }
+        if (powerups[i].y < 0 - powerups[i].radius) {
+            powerups[i].y = canvas.height + powerups[i].radius;
+        } else if (powerups[i].y > canvas.height + powerups[i].radius) {
+            powerups[i].y = 0 - powerups[i].radius;
+        }
+        
+        // Check for collision with ship if not exploding
+        if (!ship.exploding && detectCollision(ship, powerups[i])) {
+            // Apply powerup effect
+            activatePowerup(powerups[i].type);
+            
+            // Remove the powerup
+            powerups.splice(i, 1);
+            
+            // Play powerup sound
+            if (soundEnabled) {
+                sounds.extraLife();
+            }
+        }
+    }
+    
+    // Update active powerup timers
+    for (let type in activePowerups) {
+        if (activePowerups[type] > 0) {
+            activePowerups[type]--;
+            
+            // Deactivate powerup when time runs out
+            if (activePowerups[type] <= 0) {
+                deactivatePowerup(type);
+            }
+        }
+    }
+}
+
+// Activate a powerup
+function activatePowerup(type) {
+    // Reset timer if powerup already active
+    if (activePowerups[type]) {
+        activePowerups[type] = POWERUP_DURATION * FPS;
+        return;
+    }
+    
+    // Set powerup active
+    activePowerups[type] = POWERUP_DURATION * FPS;
+    
+    // Apply immediate effects
+    if (type === POWERUP_TYPES.SHIELD) {
+        // Activate shield (give invulnerability)
+        ship.blinkNum = Math.ceil(POWERUP_DURATION / SHIP_BLINK_DUR); // This will keep shield visual active
+        ship.blinkTime = Math.ceil(POWERUP_DURATION / SHIP_BLINK_DUR);
+    } else if (type === POWERUP_TYPES.EXTRA_LIFE) {
+        // Add extra life
+        lives++;
+        livesElement.textContent = lives;
+        
+        // No need to keep timer for this one-time effect
+        activePowerups[type] = 0;
+    }
+}
+
+// Deactivate a powerup
+function deactivatePowerup(type) {
+    // Reset powerup effects when they expire
+    if (type === POWERUP_TYPES.SHIELD) {
+        // Only reset shield if it was from a powerup, not from respawn
+        if (ship.blinkNum > 0) {
+            ship.blinkNum = 0;
+        }
+    }
+    
+    // Remove from active powerups
+    activePowerups[type] = 0;
 }
