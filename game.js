@@ -2062,3 +2062,340 @@ function setupEventListeners() {
 
 // Start the game when the page loads
 window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Create a new asteroid
+function createAsteroid(x, y, size) {
+    let asteroid = {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: size / 2,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2),
+        offs: []
+    };
+    
+    // Create the vertex offsets array
+    for (let i = 0; i < asteroid.vert; i++) {
+        asteroid.offs.push(Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG);
+    }
+    
+    return asteroid;
+}
+
+// Create asteroids for a new level
+function createAsteroids() {
+    asteroids = [];
+    let x, y;
+    
+    // Calculate number of asteroids based on level
+    const numAsteroids = ASTEROID_NUM + level;
+    
+    for (let i = 0; i < numAsteroids; i++) {
+        do {
+            x = Math.random() * canvas.width;
+            y = Math.random() * canvas.height;
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(ship.x, ship.y, x, y) < ASTEROID_SIZE * 2
+        );
+        
+        asteroids.push(createAsteroid(x, y, ASTEROID_SIZE));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        ctx.beginPath();
+        // Nose of the ship
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Add a laser
+        lasers.push({
+            x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+            y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+            xv: LASER_SPEED * Math.cos(ship.angle) / FPS,
+            yv: -LASER_SPEED * Math.sin(ship.angle) / FPS,
+            dist: 0,
+            explodeTime: 0
+        });
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+    }
+}
+
+// Start a new game
+function startGame() {
+    // Set up initial game state
+    score = 0;
+    level = 0;
+    lives = GAME_LIVES;
+    gameOver = false;
+    
+    // Update displays
+    scoreElement.textContent = score;
+    livesElement.textContent = lives;
+    
+    // Create ship and asteroids
+    ship = createShip();
+    asteroids = [];
+    lasers = [];
+    createAsteroids();
+    
+    // Hide start screen
+    startScreen.classList.remove("active");
+    
+    // Set modern style based on checkbox
+    isModernStyle = startStyleToggle.checked;
+    styleToggle.checked = isModernStyle;
+    
+    if (isModernStyle) {
+        preRenderAsteroids();
+    }
+    
+    // Start audio
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume();
+    }
+    
+    // Reset particles
+    particles = [];
+    
+    // Start game loop
+    gameStarted = true;
+    gameLoop();
+}
+
+// Restart the game after game over
+function restartGame() {
+    // Hide game over modal
+    gameOverModal.classList.remove("active");
+    
+    // Set up a new game
+    startGame();
+}
+
+// Show high scores
+function showHighScores() {
+    showHighScoresModal();
+}
+
+// Submit a high score
+function submitHighScore() {
+    // Get the player name (with validation)
+    const name = playerNameInput.value.trim();
+    
+    if (name === "") {
+        alert("Please enter your name!");
+        return;
+    }
+    
+    // Save the score
+    saveHighScore(name, score);
+}
+
+// Close high scores modal
+function closeHighScores() {
+    highScoresModal.classList.remove("active");
+}
+
+// Update the sound button appearance
+function updateSoundButton() {
+    if (soundEnabled) {
+        soundToggle.textContent = "🔊";
+        soundToggle.classList.remove("muted");
+    } else {
+        soundToggle.textContent = "🔇";
+        soundToggle.classList.add("muted");
+    }
+}
+
+// Update the music button appearance
+function updateMusicButton() {
+    if (musicEnabled) {
+        musicToggle.textContent = "🎵";
+        musicToggle.classList.remove("muted");
+    } else {
+        musicToggle.textContent = "🎵";
+        musicToggle.classList.add("muted");
+        musicToggle.classList.add("muted");
+    }
+}
+
+// Start background music
+function playBackgroundMusic() {
+    if (musicEnabled && audioContext) {
+        setupMusicLoop();
+    }
+}
+
+// Stop background music
+function stopBackgroundMusic() {
+    stopMusicLoop();
+}
