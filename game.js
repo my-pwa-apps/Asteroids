@@ -1165,6 +1165,28 @@ function update() {
     let exploding = ship.exploding;
     let wasThrusting = ship.thrusting;
     
+    // Apply control inputs to ship
+    if (!exploding) {
+        // Set ship rotation based on left/right keys
+        if (keys.left) {
+            ship.rotation = TURN_SPEED / 180 * Math.PI / FPS * -1;
+        } else if (keys.right) {
+            ship.rotation = TURN_SPEED / 180 * Math.PI / FPS;
+        } else {
+            ship.rotation = 0;
+        }
+        
+        // Set ship thrusting based on up key
+        ship.thrusting = keys.up;
+        
+        // Fire lasers with space key
+        if (keys.space) {
+            shootLaser();
+            // Reset space key to prevent continuous firing
+            keys.space = false;
+        }
+    }
+    
     // Update ship position
     if (!exploding) {
         // Rotate the ship
