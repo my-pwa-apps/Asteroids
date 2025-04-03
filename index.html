@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Asteroids Game</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.19.1/firebase-firestore-compat.js"></script>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="mobileControls" class="mobile-controls">
+            <div class="control-button" id="thrustButton">THRUST</div>
+            <div class="control-button" id="leftButton">LEFT</div>
+            <div class="control-button" id="rightButton">RIGHT</div>
+            <div class="control-button" id="fireButton">FIRE</div>
+        </div>
+        <div class="score-container">
+            <div>Score: <span id="score">0</span></div>
+            <div>Lives: <span id="lives">3</span></div>
+        </div>
+        <div class="style-toggle">
+            <label>
+                <input type="checkbox" id="styleToggle">
+                <span class="toggle-label">Modern Style</span>
+            </label>
+        </div>
+        <div class="audio-controls">
+            <button id="soundToggle" class="icon-button" title="Toggle Sound Effects">🔊</button>
+            <button id="musicToggle" class="icon-button" title="Toggle Music">🎵</button>
+        </div>
+        <div id="gameOverModal" class="modal">
+            <div class="modal-content">
+                <h2>Game Over</h2>
+                <p>Final Score: <span id="finalScore">0</span></p>
+                <div id="highScoreInput" class="highscore-input">
+                    <p>New High Score! Enter your name:</p>
+                    <input type="text" id="playerName" maxlength="15" placeholder="Your Name">
+                    <button id="submitScore">Submit</button>
+                </div>
+                <button id="restartButton">Play Again</button>
+                <button id="viewHighScores">View High Scores</button>
+            </div>
+        </div>
+        <div id="startScreen" class="modal active">
+            <div class="modal-content">
+                <h2>ASTEROIDS</h2>
+                <p>Use arrow keys to move, spacebar to shoot</p>
+                <p>Mobile: Use on-screen controls</p>
+                <div class="style-option">
+                    <label>
+                        <input type="checkbox" id="startStyleToggle">
+                        <span>Modern Style</span>
+                    </label>
+                </div>
+                <div class="audio-options">
+                    <label>
+                        <input type="checkbox" id="startSoundToggle" checked>
+                        <span>Sound Effects</span>
+                    </label>
+                    <label>
+                        <input type="checkbox" id="startMusicToggle" checked>
+                        <span>Music</span>
+                    </label>
+                </div>
+                <button id="startButton">Start Game</button>
+                <button id="startHighScores">High Scores</button>
+            </div>
+        </div>
+        <div id="highScoresModal" class="modal">
+            <div class="modal-content">
+                <h2>High Scores</h2>
+                <div class="highscore-list" id="highScoresList">
+                    <div class="loading">Loading scores...</div>
+                </div>
+                <button id="closeHighScores">Close</button>
+            </div>
+        </div>
+    </div>
+    <script src="game.js"></script>
+</body>
+</html>
