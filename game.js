@@ -208,6 +208,9 @@ function setupFirebase() {
         // Initialize Firestore
         db = firebase.firestore();
 
+        // Log Firestore settings for debugging
+        console.log("Firestore initialized with settings:", firebaseConfig);
+
         // Load high scores initially
         loadHighScores();
     } catch (error) {
@@ -216,10 +219,13 @@ function setupFirebase() {
     }
 }
 
-// Load high scores from Firebase
+// Enhance error handling and debugging for Firestore requests
 function loadHighScores() {
-    if (!db) return;
-    
+    if (!db) {
+        console.error("Firestore database is not initialized.");
+        return;
+    }
+
     db.collection("highScores")
         .orderBy("score", "desc")
         .limit(HIGH_SCORES_COUNT)
@@ -235,6 +241,7 @@ function loadHighScores() {
         })
         .catch((error) => {
             console.error("Error loading high scores:", error);
+            alert("Failed to load high scores. Please check your network connection and Firestore configuration.");
         });
 }
 
