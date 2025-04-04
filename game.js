@@ -2181,7 +2181,9 @@ function createAsteroids() {
     );
     
     // Update the level display
-    levelElement.textContent = level + 1; // Display level starting from 1 instead of 0
+    if (levelElement) {
+        levelElement.textContent = level + 1; // Display level starting from 1 instead of 0
+    }
     
     for (let i = 0; i < numAsteroids; i++) {
         do {
