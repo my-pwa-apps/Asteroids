@@ -2146,33 +2146,44 @@ function createShip() {
 
 // Modify createAsteroid to accept speed and jaggedness multipliers
 function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
-    let asteroid = {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Create and return the asteroid object
+    return {
         x: x || Math.random() * canvas.width,
         y: y || Math.random() * canvas.height,
         xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
         yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
-        radius: size / 2,
+        radius: radius,
         angle: Math.random() * Math.PI * 2, // in radians
-        vert: Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2),
-        offs: []
+        vert: vertCount,
+        offs: offsets
     };
-    
-    // Create the vertex offsets array with increased jaggedness
-    for (let i = 0; i < asteroid.vert; i++) {
-        asteroid.offs.push((Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG) * jaggednessMultiplier);
-    }
-    
-    return asteroid;
 }
 
 // Enhance level progression by increasing asteroid size, speed and jaggedness
 function createAsteroids() {
     asteroids = [];
     powerups = []; // Clear any existing powerups when creating new level
-    let x, y;
     
-    // Calculate number of asteroids based on level
-    const numAsteroids = ASTEROID_NUM + level;
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
     
     // Calculate asteroid size based on level with a minimum and maximum size
     const currentAsteroidSize = Math.min(
@@ -2185,13 +2196,33 @@ function createAsteroids() {
         levelElement.textContent = level + 1; // Display level starting from 1 instead of 0
     }
     
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
     for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
         do {
-            x = Math.random() * canvas.width;
-            y = Math.random() * canvas.height;
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
         } while (
             // Ensure asteroids don't spawn too close to the ship
-            distBetweenPoints(ship.x, ship.y, x, y) < currentAsteroidSize * 2
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
         );
         
         // Increase asteroid speed and jaggedness with level
