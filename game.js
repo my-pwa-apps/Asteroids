@@ -838,110 +838,137 @@ function resizeCanvas() {
 // Pre-render asteroids for better performance
 function preRenderAsteroids() {
     const sizes = [ASTEROID_SIZE, ASTEROID_SIZE/2, ASTEROID_SIZE/4];
+    const types = Object.values(ASTEROID_TYPES);
     
     // Clear existing buffers
     asteroidBuffers = {};
     
-    // Create a buffer for each asteroid size
+    // Create a buffer for each asteroid size and type combination
     sizes.forEach(size => {
-        const key = size.toString();
-        
-        // Create buffer canvas
-        const buffer = document.createElement('canvas');
-        const bufferSize = size * 2.5; // Add padding for jaggedness
-        buffer.width = bufferSize;
-        buffer.height = bufferSize;
-        
-        const bCtx = buffer.getContext('2d');
-        
-        // Create a sample asteroid
-        const sampleAsteroid = {
-            x: bufferSize / 2,
-            y: bufferSize / 2,
-            radius: size / 2,
-            angle: 0,
-            vert: Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2),
-            offs: []
-        };
-        
-        // Generate random vertices
-        for (let i = 0; i < sampleAsteroid.vert; i++) {
-            sampleAsteroid.offs.push(Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG);
-        }
-        
-        // Set modern asteroid colors based on size
-        let asteroidColor, asteroidOutlineColor;
-        if (size === ASTEROID_SIZE) {
-            asteroidColor = MODERN_COLORS.asteroid.large.fill;
-            asteroidOutlineColor = MODERN_COLORS.asteroid.large.outline;
-        } else if (size === ASTEROID_SIZE / 2) {
-            asteroidColor = MODERN_COLORS.asteroid.medium.fill;
-            asteroidOutlineColor = MODERN_COLORS.asteroid.medium.outline;
-        } else {
-            asteroidColor = MODERN_COLORS.asteroid.small.fill;
-            asteroidOutlineColor = MODERN_COLORS.asteroid.small.outline;
-        }
-        
-        // Draw modern asteroid on buffer
-        bCtx.fillStyle = asteroidColor;
-        bCtx.strokeStyle = asteroidOutlineColor;
-        bCtx.lineWidth = SHIP_SIZE / 20;
-        
-        // Draw the asteroid path
-        bCtx.beginPath();
-        for (let i = 0; i < sampleAsteroid.vert; i++) {
-            let angle = sampleAsteroid.angle + (i * Math.PI * 2 / sampleAsteroid.vert);
-            let radius = sampleAsteroid.radius * (1 + sampleAsteroid.offs[i]);
+        types.forEach(type => {
+            const key = `${size}-${type}`;
             
-            if (i === 0) {
-                bCtx.moveTo(
-                    sampleAsteroid.x + radius * Math.cos(angle),
-                    sampleAsteroid.y + radius * Math.sin(angle)
-                );
-            } else {
-                bCtx.lineTo(
-                    sampleAsteroid.x + radius * Math.cos(angle),
-                    sampleAsteroid.y + radius * Math.sin(angle)
-                );
+            // Create buffer canvas
+            const buffer = document.createElement('canvas');
+            const bufferSize = size * 2.5; // Add padding for jaggedness
+            buffer.width = bufferSize;
+            buffer.height = bufferSize;
+            
+            const bCtx = buffer.getContext('2d');
+            
+            // Create a sample asteroid
+            const sampleAsteroid = {
+                x: bufferSize / 2,
+                y: bufferSize / 2,
+                radius: size / 2,
+                angle: 0,
+                type: type,
+                vert: Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2),
+                offs: []
+            };
+            
+            // Generate random vertices
+            for (let i = 0; i < sampleAsteroid.vert; i++) {
+                sampleAsteroid.offs.push(Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG);
             }
-        }
-        bCtx.closePath();
-        bCtx.fill();
-        bCtx.stroke();
-        
-        // Add a subtle highlight
-        bCtx.fillStyle = "rgba(255, 255, 255, 0.1)";
-        bCtx.beginPath();
-        bCtx.arc(
-            sampleAsteroid.x - sampleAsteroid.radius * 0.3, 
-            sampleAsteroid.y - sampleAsteroid.radius * 0.3, 
-            sampleAsteroid.radius * 0.4, 
-            0, 
-            Math.PI * 2
-        );
-        bCtx.fill();
-        
-        // Add some crater details
-        const craterCount = Math.floor(sampleAsteroid.radius / 10);
-        bCtx.fillStyle = "rgba(0, 0, 0, 0.2)";
-        
-        for (let i = 0; i < craterCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const distance = Math.random() * sampleAsteroid.radius * 0.7;
-            const craterX = sampleAsteroid.x + Math.cos(angle) * distance;
-            const craterY = sampleAsteroid.y + Math.sin(angle) * distance;
-            const craterSize = Math.random() * sampleAsteroid.radius * 0.3 + sampleAsteroid.radius * 0.05;
             
+            // Get colors based on size and type
+            let sizeCategory;
+            if (size === ASTEROID_SIZE) sizeCategory = 'large';
+            else if (size === ASTEROID_SIZE / 2) sizeCategory = 'medium';
+            else sizeCategory = 'small';
+            
+            const typeColors = ASTEROID_TYPE_COLORS[type][sizeCategory];
+            
+            // Draw the asteroid body
+            bCtx.fillStyle = typeColors.fill;
+            bCtx.strokeStyle = typeColors.outline;
+            bCtx.lineWidth = SHIP_SIZE / 20;
+            
+            // Draw the asteroid path
             bCtx.beginPath();
-            bCtx.arc(craterX, craterY, craterSize, 0, Math.PI * 2);
+            for (let i = 0; i < sampleAsteroid.vert; i++) {
+                let angle = sampleAsteroid.angle + (i * Math.PI * 2 / sampleAsteroid.vert);
+                let radius = sampleAsteroid.radius * (1 + sampleAsteroid.offs[i]);
+                
+                if (i === 0) {
+                    bCtx.moveTo(
+                        sampleAsteroid.x + radius * Math.cos(angle),
+                        sampleAsteroid.y + radius * Math.sin(angle)
+                    );
+                } else {
+                    bCtx.lineTo(
+                        sampleAsteroid.x + radius * Math.cos(angle),
+                        sampleAsteroid.y + radius * Math.sin(angle)
+                    );
+                }
+            }
+            bCtx.closePath();
             bCtx.fill();
-        }
-        
-        // Store the buffer
-        asteroidBuffers[key] = {
-            canvas: buffer,
-            asteroid: sampleAsteroid
-        };
+            bCtx.stroke();
+            
+            // Add type-specific details
+            if (type === ASTEROID_TYPES.ROCKY || type === ASTEROID_TYPES.METALLIC) {
+                // Add craters for rocky and metallic types
+                const craterCount = Math.floor(sampleAsteroid.radius / 6);
+                bCtx.fillStyle = typeColors.craters;
+                
+                for (let i = 0; i < craterCount; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = Math.random() * sampleAsteroid.radius * 0.7;
+                    const craterX = sampleAsteroid.x + Math.cos(angle) * distance;
+                    const craterY = sampleAsteroid.y + Math.sin(angle) * distance;
+                    const craterSize = Math.random() * sampleAsteroid.radius * 0.2 + sampleAsteroid.radius * 0.05;
+                    
+                    bCtx.beginPath();
+                    bCtx.arc(craterX, craterY, craterSize, 0, Math.PI * 2);
+                    bCtx.fill();
+                }
+                
+                // Add a subtle highlight (different for each type)
+                if (type === ASTEROID_TYPES.ROCKY) {
+                    bCtx.fillStyle = "rgba(255, 255, 255, 0.07)";
+                } else { // METALLIC
+                    bCtx.fillStyle = "rgba(255, 220, 150, 0.15)";
+                }
+            } else {
+                // ICY type - add crystalline patterns
+                bCtx.fillStyle = "rgba(255, 255, 255, 0.15)";
+                
+                // Add shine lines
+                for (let i = 0; i < 4; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const startX = sampleAsteroid.x + Math.cos(angle) * (sampleAsteroid.radius * 0.2);
+                    const startY = sampleAsteroid.y + Math.sin(angle) * (sampleAsteroid.radius * 0.2);
+                    const endX = sampleAsteroid.x + Math.cos(angle) * sampleAsteroid.radius * 0.8;
+                    const endY = sampleAsteroid.y + Math.sin(angle) * sampleAsteroid.radius * 0.8;
+                    
+                    bCtx.beginPath();
+                    bCtx.moveTo(startX, startY);
+                    bCtx.lineTo(endX, endY);
+                    bCtx.lineWidth = sampleAsteroid.radius * 0.1;
+                    bCtx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+                    bCtx.stroke();
+                }
+            }
+            
+            // Add a highlight to all asteroid types
+            bCtx.beginPath();
+            bCtx.arc(
+                sampleAsteroid.x - sampleAsteroid.radius * 0.3, 
+                sampleAsteroid.y - sampleAsteroid.radius * 0.3, 
+                sampleAsteroid.radius * 0.4, 
+                0, 
+                Math.PI * 2
+            );
+            bCtx.fill();
+            
+            // Store the buffer
+            asteroidBuffers[key] = {
+                canvas: buffer,
+                asteroid: sampleAsteroid
+            };
+        });
     });
 }
 
@@ -949,55 +976,63 @@ function preRenderAsteroids() {
 function drawAsteroid(asteroid) {
     const size = asteroid.radius * 2;
     
-    if (isModernStyle && asteroidBuffers[size]) {
-        // Use pre-rendered asteroid
-        const buffer = asteroidBuffers[size];
+    if (isModernStyle) {
+        // Update asteroid angle based on rotation speed
+        asteroid.angle += asteroid.rotationSpeed || 0;
         
-        // Draw the pre-rendered asteroid with rotation
-        ctx.save();
-        ctx.translate(asteroid.x, asteroid.y);
-        ctx.rotate(asteroid.angle);
-        ctx.drawImage(
-            buffer.canvas, 
-            -buffer.canvas.width/2, 
-            -buffer.canvas.height/2
-        );
-        ctx.restore();
+        // Use pre-rendered asteroid if available
+        const bufferKey = `${size}-${asteroid.type || ASTEROID_TYPES.ROCKY}`;
         
-        // Add subtle glow effect
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = size === ASTEROID_SIZE ? 
-            MODERN_COLORS.asteroid.large.outline : 
-            (size === ASTEROID_SIZE/2 ? 
-             MODERN_COLORS.asteroid.medium.outline : 
-             MODERN_COLORS.asteroid.small.outline);
-             
-        ctx.beginPath();
-        ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 0.9, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.restore();
-    } else {
-        // Fall back to drawing directly if buffer not available
-        // (Original drawing code...)
-        let asteroidColor, asteroidOutlineColor;
-        
-        if (isModernStyle) {
-            // Set modern asteroid colors based on size
-            if (size === ASTEROID_SIZE) {
-                asteroidColor = MODERN_COLORS.asteroid.large.fill;
-                asteroidOutlineColor = MODERN_COLORS.asteroid.large.outline;
-            } else if (size === ASTEROID_SIZE / 2) {
-                asteroidColor = MODERN_COLORS.asteroid.medium.fill;
-                asteroidOutlineColor = MODERN_COLORS.asteroid.medium.outline;
+        if (asteroidBuffers[bufferKey]) {
+            // Draw the pre-rendered asteroid with rotation
+            ctx.save();
+            ctx.translate(asteroid.x, asteroid.y);
+            ctx.rotate(asteroid.angle);
+            ctx.drawImage(
+                asteroidBuffers[bufferKey].canvas, 
+                -asteroidBuffers[bufferKey].canvas.width/2, 
+                -asteroidBuffers[bufferKey].canvas.height/2
+            );
+            ctx.restore();
+            
+            // Add type-specific glow effects
+            ctx.save();
+            ctx.globalAlpha = asteroid.glowIntensity || 0.1;
+            ctx.shadowBlur = 8;
+            
+            if (asteroid.type === ASTEROID_TYPES.ICY) {
+                ctx.shadowColor = "rgba(100, 150, 255, 0.8)";
+                ctx.beginPath();
+                ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 1.1, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(100, 150, 255, 0.1)";
+                ctx.fill();
+            } else if (asteroid.type === ASTEROID_TYPES.METALLIC) {
+                ctx.shadowColor = "rgba(255, 200, 100, 0.6)";
+                ctx.beginPath();
+                ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 1.05, 0, Math.PI * 2);
+                ctx.fillStyle = "rgba(255, 200, 100, 0.05)";
+                ctx.fill();
             } else {
-                asteroidColor = MODERN_COLORS.asteroid.small.fill;
-                asteroidOutlineColor = MODERN_COLORS.asteroid.small.outline;
+                ctx.shadowColor = "rgba(150, 120, 200, 0.4)";
             }
             
-            ctx.fillStyle = asteroidColor;
-            ctx.strokeStyle = asteroidOutlineColor;
+            ctx.beginPath();
+            ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 0.9, 0, Math.PI * 2);
+            ctx.closePath();
+            ctx.restore();
+        } else {
+            // Fallback to direct drawing if buffer not available
+            // Get colors based on type and size
+            let sizeCategory;
+            if (size === ASTEROID_SIZE) sizeCategory = 'large';
+            else if (size === ASTEROID_SIZE / 2) sizeCategory = 'medium';
+            else sizeCategory = 'small';
+            
+            const type = asteroid.type || ASTEROID_TYPES.ROCKY;
+            const colors = ASTEROID_TYPE_COLORS[type][sizeCategory];
+            
+            ctx.fillStyle = colors.fill;
+            ctx.strokeStyle = colors.outline;
             ctx.lineWidth = SHIP_SIZE / 20;
             
             // Draw the asteroid path
@@ -1021,32 +1056,32 @@ function drawAsteroid(asteroid) {
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
-        } else {
-            // Original retro style
-            ctx.strokeStyle = "slategrey";
-            ctx.lineWidth = SHIP_SIZE / 20;
-            
-            // Draw the asteroid path
-            ctx.beginPath();
-            for (let i = 0; i < asteroid.vert; i++) {
-                let angle = asteroid.angle + (i * Math.PI * 2 / asteroid.vert);
-                let radius = asteroid.radius * (1 + asteroid.offs[i]);
-                
-                if (i === 0) {
-                    ctx.moveTo(
-                        asteroid.x + radius * Math.cos(angle),
-                        asteroid.y + radius * Math.sin(angle)
-                    );
-                } else {
-                    ctx.lineTo(
-                        asteroid.x + radius * Math.cos(angle),
-                        asteroid.y + radius * Math.sin(angle)
-                    );
-                }
-            }
-            ctx.closePath();
-            ctx.stroke();
         }
+    } else {
+        // Original retro style drawing (unchanged)
+        ctx.strokeStyle = "slategrey";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Draw the asteroid path
+        ctx.beginPath();
+        for (let i = 0; i < asteroid.vert; i++) {
+            let angle = asteroid.angle + (i * Math.PI * 2 / asteroid.vert);
+            let radius = asteroid.radius * (1 + asteroid.offs[i]);
+            
+            if (i === 0) {
+                ctx.moveTo(
+                    asteroid.x + radius * Math.cos(angle),
+                    asteroid.y + radius * Math.sin(angle)
+                );
+            } else {
+                ctx.lineTo(
+                    asteroid.x + radius * Math.cos(angle),
+                    asteroid.y + radius * Math.sin(angle)
+                );
+            }
+        }
+        ctx.closePath();
+        ctx.stroke();
     }
     
     // Show collision circle
@@ -2144,6 +2179,68 @@ function createShip() {
     };
 }
 
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
 // Modify createAsteroid to accept speed and jaggedness multipliers
 function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
     // Pre-calculate radius for efficiency
@@ -2159,6 +2256,23 @@ function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 
         offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
     }
     
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
     // Create and return the asteroid object
     return {
         x: x || Math.random() * canvas.width,
@@ -2168,7 +2282,15 @@ function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 
         radius: radius,
         angle: Math.random() * Math.PI * 2, // in radians
         vert: vertCount,
-        offs: offsets
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
     };
 }
 
