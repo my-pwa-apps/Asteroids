@@ -2467,6 +2467,9 @@ function updateLevelIndicator(newLevel) {
 
 // Start a new game
 function startGame() {
+    // Clean up splash screen explicitly
+    cleanupSplashScreen();
+    
     // Set up initial game state
     score = 0;
     level = 0;
@@ -2824,6 +2827,498 @@ function init() {
     
     // Initialize parallax stars for modern mode
     initializeParallaxStars();
+    
+    // Initialize splash screen
+    initSplashScreen();
+}
+
+// Initialize splash screen with animated elements
+function initSplashScreen() {
+    // Set up splash screen canvas
+    splashCanvas = document.createElement('canvas');
+    splashCanvas.width = window.innerWidth;
+    splashCanvas.height = window.innerHeight;
+    splashCtx = splashCanvas.getContext('2d');
+    
+    // Add canvas to splash screen
+    startScreen.appendChild(splashCanvas);
+    
+    // Create stars for splash background
+    createSplashStars();
+    
+    // Create asteroids for splash screen
+    createSplashAsteroids();
+    
+    // Add hover effects to buttons
+    initButtonHoverEffects();
+    
+    // Start splash screen animation
+    animateSplashScreen();
+}
+
+// Create animated stars for splash screen background
+function createSplashStars() {
+    const starCount = Math.floor((splashCanvas.width * splashCanvas.height) / 1000); // More dense than game stars
+    
+    for (let i = 0; i < starCount; i++) {
+        splashStars.push({
+            x: Math.random() * splashCanvas.width,
+            y: Math.random() * splashCanvas.height,
+            size: Math.random() * 3 + 0.5,
+            speed: Math.random() * 0.3 + 0.1,
+            brightness: Math.random() * 0.5 + 0.5,
+            color: Math.random() > 0.8 ? 
+                (Math.random() > 0.5 ? "#8af" : "#faa") : "#fff",
+            twinkleSpeed: Math.random() * 0.05 + 0.01,
+            twinkleAmount: Math.random() * 0.7 + 0.3,
+            twinklePhase: Math.random() * Math.PI * 2
+        });
+    }
+}
+
+// Create floating asteroids for splash screen
+function createSplashAsteroids() {
+    // Create 5-8 asteroids of different sizes
+    const asteroidCount = 5 + Math.floor(Math.random() * 4);
+    
+    for (let i = 0; i < asteroidCount; i++) {
+        // Create asteroid with random properties
+        const size = Math.random() * 80 + 40;
+        splashAsteroids.push({
+            x: Math.random() * splashCanvas.width,
+            y: Math.random() * splashCanvas.height,
+            radius: size / 2,
+            xv: (Math.random() - 0.5) * 0.5, // Slow movement
+            yv: (Math.random() - 0.5) * 0.5,
+            angle: Math.random() * Math.PI * 2,
+            rotation: (Math.random() - 0.5) * 0.02,
+            vert: Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2),
+            offs: [],
+            type: Object.values(ASTEROID_TYPES)[Math.floor(Math.random() * 3)]
+        });
+        
+        // Generate random vertices
+        for (let j = 0; j < splashAsteroids[i].vert; j++) {
+            splashAsteroids[i].offs.push(Math.random() * ASTEROID_JAG * 2 + 1 - ASTEROID_JAG);
+        }
+    }
+}
+
+// Create title particles for splash screen
+function createTitleParticles() {
+    const titleX = splashCanvas.width / 2;
+    const titleY = splashCanvas.height * 0.3;
+    
+    // Clear existing particles
+    if (titleParticles.length > 100) {
+        titleParticles = titleParticles.slice(-50);
+    }
+    
+    // Create new particles
+    for (let i = 0; i < 3; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * 100 + 50;
+        
+        titleParticles.push({
+            x: titleX + Math.cos(angle) * distance * 0.2,
+            y: titleY + Math.sin(angle) * distance * 0.1,
+            targetX: titleX + Math.cos(angle) * distance,
+            targetY: titleY + Math.sin(angle) * distance,
+            size: Math.random() * 3 + 1,
+            color: Math.random() > 0.5 ? '#00ffff' : '#ff00ff',
+            alpha: Math.random() * 0.7 + 0.3,
+            speed: Math.random() * 0.02 + 0.01
+        });
+    }
+}
+
+// Initialize button hover effects for splash screen
+function initButtonHoverEffects() {
+    // Get all buttons on splash screen
+    const buttons = startScreen.querySelectorAll('button, .button');
+    
+    buttons.forEach(button => {
+        // Create hover effect data for this button
+        buttonHoverEffects[button.id] = {
+            particles: [],
+            hovered: false,
+            color: button.id === 'startButton' ? '#00ffff' : '#ffffff'
+        };
+        
+        // Add mouse event listeners
+        button.addEventListener('mouseenter', () => {
+            buttonHoverEffects[button.id].hovered = true;
+        });
+        
+        button.addEventListener('mouseleave', () => {
+            buttonHoverEffects[button.id].hovered = false;
+        });
+    });
+}
+
+// Update button hover effects
+function updateButtonHoverEffects() {
+    Object.keys(buttonHoverEffects).forEach(buttonId => {
+        const effect = buttonHoverEffects[buttonId];
+        const button = document.getElementById(buttonId);
+        
+        if (!button) return;
+        
+        // If button is hovered, create particles
+        if (effect.hovered) {
+            const buttonRect = button.getBoundingClientRect();
+            
+            // Create particles around the button
+            if (Math.random() < 0.3) {
+                const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+                let x, y;
+                
+                switch(side) {
+                    case 0: // top
+                        x = buttonRect.left + Math.random() * buttonRect.width;
+                        y = buttonRect.top;
+                        break;
+                    case 1: // right
+                        x = buttonRect.right;
+                        y = buttonRect.top + Math.random() * buttonRect.height;
+                        break;
+                    case 2: // bottom
+                        x = buttonRect.left + Math.random() * buttonRect.width;
+                        y = buttonRect.bottom;
+                        break;
+                    case 3: // left
+                        x = buttonRect.left;
+                        y = buttonRect.top + Math.random() * buttonRect.height;
+                        break;
+                }
+                
+                effect.particles.push({
+                    x: x,
+                    y: y,
+                    size: Math.random() * 2 + 1,
+                    speedX: (Math.random() - 0.5) * 2,
+                    speedY: (Math.random() - 0.5) * 2,
+                    life: 1.0,
+                    color: effect.color
+                });
+            }
+        }
+        
+        // Update existing particles
+        for (let i = effect.particles.length - 1; i >= 0; i--) {
+            const particle = effect.particles[i];
+            
+            // Move particle
+            particle.x += particle.speedX;
+            particle.y += particle.speedY;
+            
+            // Reduce life
+            particle.life -= 0.02;
+            
+            // Remove dead particles
+            if (particle.life <= 0) {
+                effect.particles.splice(i, 1);
+            }
+        }
+    });
+}
+
+// Draw splash screen
+function drawSplashScreen() {
+    // Clear canvas
+    splashCtx.fillStyle = MODERN_COLORS.background;
+    splashCtx.fillRect(0, 0, splashCanvas.width, splashCanvas.height);
+    
+    // Draw stars
+    drawSplashStars();
+    
+    // Draw asteroids
+    drawSplashAsteroids();
+    
+    // Draw title
+    drawSplashTitle();
+    
+    // Draw particles
+    drawTitleParticles();
+    
+    // Draw button effects
+    drawButtonEffects();
+}
+
+// Draw stars for splash screen
+function drawSplashStars() {
+    const now = Date.now() / 1000;
+    
+    splashCtx.shadowBlur = 3;
+    
+    for (let i = 0; i < splashStars.length; i++) {
+        const star = splashStars[i];
+        
+        // Move stars slowly downward for parallax effect
+        star.y += star.speed;
+        if (star.y > splashCanvas.height) {
+            star.y = 0;
+            star.x = Math.random() * splashCanvas.width;
+        }
+        
+        // Calculate twinkle effect
+        const twinkle = star.twinkleAmount * Math.sin(now * star.twinkleSpeed * Math.PI * 2 + star.twinklePhase) + 1 - star.twinkleAmount;
+        
+        // Draw the star
+        splashCtx.fillStyle = star.color;
+        splashCtx.shadowColor = star.color;
+        splashCtx.globalAlpha = star.brightness * twinkle;
+        
+        splashCtx.beginPath();
+        splashCtx.arc(star.x, star.y, star.size * twinkle, 0, Math.PI * 2);
+        splashCtx.fill();
+    }
+    
+    splashCtx.globalAlpha = 1.0;
+    splashCtx.shadowBlur = 0;
+}
+
+// Draw asteroids on splash screen
+function drawSplashAsteroids() {
+    for (let i = 0; i < splashAsteroids.length; i++) {
+        const asteroid = splashAsteroids[i];
+        
+        // Move the asteroid
+        asteroid.x += asteroid.xv;
+        asteroid.y += asteroid.yv;
+        
+        // Rotate the asteroid
+        asteroid.angle += asteroid.rotation;
+        
+        // Wrap around screen edges
+        if (asteroid.x < -asteroid.radius * 2) {
+            asteroid.x = splashCanvas.width + asteroid.radius;
+        } else if (asteroid.x > splashCanvas.width + asteroid.radius * 2) {
+            asteroid.x = -asteroid.radius;
+        }
+        
+        if (asteroid.y < -asteroid.radius * 2) {
+            asteroid.y = splashCanvas.height + asteroid.radius;
+        } else if (asteroid.y > splashCanvas.height + asteroid.radius * 2) {
+            asteroid.y = -asteroid.radius;
+        }
+        
+        // Draw the asteroid
+        let sizeCategory;
+        if (asteroid.radius * 2 >= ASTEROID_SIZE) sizeCategory = 'large';
+        else if (asteroid.radius * 2 >= ASTEROID_SIZE/2) sizeCategory = 'medium';
+        else sizeCategory = 'small';
+        
+        const colors = ASTEROID_TYPE_COLORS[asteroid.type][sizeCategory];
+        
+        splashCtx.fillStyle = colors.fill;
+        splashCtx.strokeStyle = colors.outline;
+        splashCtx.lineWidth = SHIP_SIZE / 20;
+        
+        // Draw asteroid path
+        splashCtx.beginPath();
+        for (let j = 0; j < asteroid.vert; j++) {
+            const angle = asteroid.angle + (j * Math.PI * 2 / asteroid.vert);
+            const radius = asteroid.radius * (1 + asteroid.offs[j]);
+            
+            if (j === 0) {
+                splashCtx.moveTo(
+                    asteroid.x + radius * Math.cos(angle),
+                    asteroid.y + radius * Math.sin(angle)
+                );
+            } else {
+                splashCtx.lineTo(
+                    asteroid.x + radius * Math.cos(angle),
+                    asteroid.y + radius * Math.sin(angle)
+                );
+            }
+        }
+        
+        splashCtx.closePath();
+        splashCtx.fill();
+        splashCtx.stroke();
+        
+        // Add glow effect for icy asteroids
+        if (asteroid.type === ASTEROID_TYPES.ICY) {
+            splashCtx.shadowBlur = 15;
+            splashCtx.shadowColor = "rgba(100, 150, 255, 0.5)";
+            splashCtx.stroke();
+            splashCtx.shadowBlur = 0;
+        }
+    }
+}
+
+// Draw the game title
+function drawSplashTitle() {
+    const centerX = splashCanvas.width / 2;
+    const centerY = splashCanvas.height * 0.3;
+    
+    // Update title pulse effect
+    titlePulse += 0.03;
+    if (titlePulse > Math.PI * 2) {
+        titlePulse -= Math.PI * 2;
+    }
+    
+    // Calculate pulse effect 
+    const pulseFactor = 1 + 0.05 * Math.sin(titlePulse);
+    
+    // Update logo rotation
+    logoRotation += 0.001;
+    
+    // Draw title with glow effect
+    splashCtx.save();
+    splashCtx.translate(centerX, centerY);
+    splashCtx.rotate(Math.sin(logoRotation) * 0.05);
+    splashCtx.scale(pulseFactor, pulseFactor);
+    
+    // Text shadow for glow effect
+    splashCtx.shadowColor = "rgba(0, 255, 255, 0.8)";
+    splashCtx.shadowBlur = 15;
+    
+    // Draw main title
+    splashCtx.font = "bold 72px 'Russo One', Arial, sans-serif";
+    splashCtx.textAlign = "center";
+    splashCtx.textBaseline = "middle";
+    
+    const gradient = splashCtx.createLinearGradient(0, -40, 0, 40);
+    gradient.addColorStop(0, "#ffffff");
+    gradient.addColorStop(0.5, "#00ffff");
+    gradient.addColorStop(1, "#0088ff");
+    
+    splashCtx.fillStyle = gradient;
+    
+    // Draw text with multiple layers for enhanced glow
+    splashCtx.globalAlpha = 0.3;
+    splashCtx.fillText("ASTEROIDS", 3, 3);
+    splashCtx.fillText("ASTEROIDS", -3, -3);
+    splashCtx.fillText("ASTEROIDS", 3, -3);
+    splashCtx.fillText("ASTEROIDS", -3, 3);
+    
+    // Main text
+    splashCtx.globalAlpha = 1.0;
+    splashCtx.fillText("ASTEROIDS", 0, 0);
+    
+    // Add a smaller subtitle
+    splashCtx.font = "24px 'Arial', sans-serif";
+    splashCtx.fillStyle = "#66ccff";
+    splashCtx.shadowBlur = 10;
+    splashCtx.fillText("ENHANCED EDITION", 0, 50);
+    
+    splashCtx.restore();
+    
+    // Generate particles at random intervals
+    if (Math.random() < 0.1) {
+        createTitleParticles();
+    }
+}
+
+// Draw title particles
+function drawTitleParticles() {
+    splashCtx.save();
+    splashCtx.shadowBlur = 10;
+    
+    for (let i = titleParticles.length - 1; i >= 0; i--) {
+        const particle = titleParticles[i];
+        
+        // Move particle toward target
+        particle.x += (particle.targetX - particle.x) * particle.speed;
+        particle.y += (particle.targetY - particle.y) * particle.speed;
+        
+        // Draw the particle
+        splashCtx.globalAlpha = particle.alpha;
+        splashCtx.fillStyle = particle.color;
+        splashCtx.shadowColor = particle.color;
+        
+        splashCtx.beginPath();
+        splashCtx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+        splashCtx.fill();
+        
+        // Remove particles that reached their target
+        if (Math.abs(particle.x - particle.targetX) < 0.5 && 
+            Math.abs(particle.y - particle.targetY) < 0.5) {
+            titleParticles.splice(i, 1);
+        }
+    }
+    
+    splashCtx.restore();
+}
+
+// Draw button hover effects
+function drawButtonEffects() {
+    splashCtx.save();
+    splashCtx.shadowBlur = 8;
+    
+    Object.keys(buttonHoverEffects).forEach(buttonId => {
+        const effect = buttonHoverEffects[buttonId];
+        const button = document.getElementById(buttonId);
+        
+        if (!button) return;
+        
+        // Draw button glow if hovered
+        if (effect.hovered) {
+            const rect = button.getBoundingClientRect();
+            
+            // Draw glow outline around button
+            splashCtx.strokeStyle = effect.color;
+            splashCtx.shadowColor = effect.color;
+            splashCtx.lineWidth = 2;
+            splashCtx.strokeRect(rect.left, rect.top, rect.width, rect.height);
+        }
+        
+        // Draw particles
+        effect.particles.forEach(particle => {
+            splashCtx.globalAlpha = particle.life;
+            splashCtx.fillStyle = particle.color;
+            splashCtx.shadowColor = particle.color;
+            
+            splashCtx.beginPath();
+            splashCtx.arc(
+                particle.x,
+                particle.y,
+                particle.size * particle.life,
+                0,
+                Math.PI * 2
+            );
+            splashCtx.fill();
+        });
+    });
+    
+    splashCtx.restore();
+}
+
+// Animate the splash screen
+function animateSplashScreen() {
+    if (!gameStarted) {
+        splashAnimationId = requestAnimationFrame(animateSplashScreen);
+        
+        // Update button effects
+        updateButtonHoverEffects();
+        
+        // Draw the splash screen
+        drawSplashScreen();
+    } else {
+        // Game has started, clean up splash screen
+        cleanupSplashScreen();
+    }
+}
+
+// Clean up splash screen resources
+function cleanupSplashScreen() {
+    if (splashAnimationId) {
+        cancelAnimationFrame(splashAnimationId);
+        splashAnimationId = null;
+    }
+    
+    // Remove canvas from the DOM
+    if (splashCanvas && splashCanvas.parentNode) {
+        splashCanvas.parentNode.removeChild(splashCanvas);
+    }
+    
+    // Clear arrays
+    splashStars = [];
+    titleParticles = [];
+    splashAsteroids = [];
+    buttonHoverEffects = {};
 }
 
 // Object to track pressed keys
