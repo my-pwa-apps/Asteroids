@@ -3100,8 +3100,8 @@ function drawSplashStars() {
             star.x = Math.random() * splashCanvas.width;
         }
         
-        // Calculate twinkle effect
-        const twinkle = star.twinkleAmount * Math.sin(now * star.twinkleSpeed * Math.PI * 2 + star.twinklePhase) + 1 - star.twinkleAmount;
+        // Calculate twinkle effect - Ensure it's never negative
+        const twinkle = Math.max(0.1, star.twinkleAmount * Math.sin(now * star.twinkleSpeed * Math.PI * 2 + star.twinklePhase) + 1 - star.twinkleAmount);
         
         // Draw the star
         splashCtx.fillStyle = star.color;
