@@ -4012,3 +4012,6786 @@ function gameLoop() {
 
 // Start the game when the page loads
 window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
+        explodeTime: 0,
+        blinkNum: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR),
+        blinkTime: Math.ceil(SHIP_INVULNERABILITY_DUR / SHIP_BLINK_DUR)
+    };
+}
+
+// Asteroid types for modern visualization
+const ASTEROID_TYPES = {
+    ROCKY: "rocky",
+    ICY: "icy",
+    METALLIC: "metallic"
+};
+
+// Modern style asteroid type colors
+const ASTEROID_TYPE_COLORS = {
+    rocky: {
+        large: {
+            fill: "#5a4f70",
+            outline: "#7777cc",
+            craters: "rgba(30, 30, 50, 0.4)"
+        },
+        medium: {
+            fill: "#6a5f80", 
+            outline: "#9999ee",
+            craters: "rgba(40, 40, 60, 0.4)"
+        },
+        small: {
+            fill: "#8a7f90",
+            outline: "#aaaaff",
+            craters: "rgba(50, 50, 70, 0.4)"
+        }
+    },
+    icy: {
+        large: {
+            fill: "#4f6e8c",
+            outline: "#77aadd",
+            craters: "rgba(200, 230, 255, 0.3)"
+        },
+        medium: {
+            fill: "#5f7e9c", 
+            outline: "#99ccff",
+            craters: "rgba(210, 240, 255, 0.3)"
+        },
+        small: {
+            fill: "#6f8eac",
+            outline: "#bbddff",
+            craters: "rgba(220, 250, 255, 0.3)"
+        }
+    },
+    metallic: {
+        large: {
+            fill: "#6b5836",
+            outline: "#aa8844",
+            craters: "rgba(60, 40, 20, 0.5)"
+        },
+        medium: {
+            fill: "#7b6846", 
+            outline: "#cc9955",
+            craters: "rgba(70, 50, 30, 0.5)"
+        },
+        small: {
+            fill: "#8b7856",
+            outline: "#ddaa66",
+            craters: "rgba(80, 60, 40, 0.5)"
+        }
+    }
+};
+
+// Modify createAsteroid to accept speed and jaggedness multipliers
+function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
+    // Pre-calculate radius for efficiency
+    const radius = size / 2;
+    const vertCount = Math.floor(Math.random() * (ASTEROID_VERT + 1) + ASTEROID_VERT / 2);
+    
+    // Create the vertex offsets array more efficiently
+    const offsets = new Array(vertCount);
+    const jagFactor = ASTEROID_JAG * 2 * jaggednessMultiplier;
+    const jagOffset = ASTEROID_JAG * jaggednessMultiplier;
+    
+    for (let i = 0; i < vertCount; i++) {
+        offsets[i] = Math.random() * jagFactor + 1 - jagOffset;
+    }
+    
+    // Determine asteroid type - weighted distribution
+    let asteroidType;
+    const typeRoll = Math.random();
+    if (typeRoll < 0.6) {
+        asteroidType = ASTEROID_TYPES.ROCKY; // 60% rocky
+    } else if (typeRoll < 0.85) {
+        asteroidType = ASTEROID_TYPES.METALLIC; // 25% metallic
+    } else {
+        asteroidType = ASTEROID_TYPES.ICY; // 15% icy
+    }
+    
+    // Add visual variation parameters for modern style
+    const rotationSpeed = (Math.random() * 0.02 - 0.01) * (1 + level * 0.05); // Rotation speed affected by level
+    const textureVariation = Math.random(); // 0-1 value for texture variation
+    const craterCount = Math.floor(Math.random() * (radius / 10) + radius / 20);
+    const surfaceSmoothness = Math.random() * 0.5 + 0.3; // How smooth the asteroid surface is (0-1)
+    
+    // Create and return the asteroid object
+    return {
+        x: x || Math.random() * canvas.width,
+        y: y || Math.random() * canvas.height,
+        xv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        yv: (Math.random() * ASTEROID_SPEED * speedMultiplier / FPS) * (Math.random() < 0.5 ? 1 : -1),
+        radius: radius,
+        angle: Math.random() * Math.PI * 2, // in radians
+        vert: vertCount,
+        offs: offsets,
+        // Visual properties for modern style
+        rotationSpeed: rotationSpeed,
+        type: asteroidType,
+        textureVariation: textureVariation,
+        craterCount: craterCount,
+        surfaceSmoothness: surfaceSmoothness,
+        glowIntensity: asteroidType === ASTEROID_TYPES.ICY ? 0.4 + Math.random() * 0.3 : 0.1 + Math.random() * 0.1,
+        surfaceDetail: []
+    };
+}
+
+// Enhance level progression by increasing asteroid size, speed and jaggedness
+function createAsteroids() {
+    asteroids = [];
+    powerups = []; // Clear any existing powerups when creating new level
+    
+    // Cache canvas dimensions for better performance
+    const canvasWidth = canvas.width;
+    const canvasHeight = canvas.height;
+    
+    // Calculate number of asteroids based on level with a maximum limit
+    const MAX_ASTEROIDS = 15; // Prevent too many asteroids causing performance issues
+    const numAsteroids = Math.min(ASTEROID_NUM + level, MAX_ASTEROIDS);
+    
+    // Calculate asteroid size based on level with a minimum and maximum size
+    const currentAsteroidSize = Math.min(
+        INITIAL_ASTEROID_SIZE + (level * ASTEROID_SIZE_INCREMENT),
+        MAX_ASTEROID_SIZE
+    );
+    
+    // Update the level display with highlight effect
+    updateLevelIndicator(level);
+    
+    // Show level announcement when starting a new level
+    showLevelAnnouncement();
+    
+    // Increase asteroid speed and jaggedness with level
+    const speedMultiplier = 1 + level * 0.1;
+    const jaggednessMultiplier = 1 + level * 0.05;
+    
+    // Calculate safe spawn distance from ship (increases slightly with level)
+    const safeDistance = currentAsteroidSize * 2 + (level * 5);
+    const shipX = ship.x;
+    const shipY = ship.y;
+    
+    // Create asteroids more efficiently
+    for (let i = 0; i < numAsteroids; i++) {
+        let x, y;
+        let attempts = 0;
+        const MAX_ATTEMPTS = 10; // Prevent infinite loops
+        
+        do {
+            // Generate random position
+            x = Math.random() * canvasWidth;
+            y = Math.random() * canvasHeight;
+            attempts++;
+            
+            // Break after maximum attempts to avoid infinite loops
+            if (attempts >= MAX_ATTEMPTS) {
+                // Place at a corner if we can't find a good spot
+                x = (Math.random() < 0.5) ? currentAsteroidSize : canvasWidth - currentAsteroidSize;
+                y = (Math.random() < 0.5) ? currentAsteroidSize : canvasHeight - currentAsteroidSize;
+                break;
+            }
+        } while (
+            // Ensure asteroids don't spawn too close to the ship
+            distBetweenPoints(shipX, shipY, x, y) < safeDistance
+        );
+        
+        asteroids.push(createAsteroid(x, y, currentAsteroidSize, speedMultiplier, jaggednessMultiplier));
+    }
+    
+    // Play level up sound if not the first level
+    if (level > 0 && soundEnabled && sounds.levelUp) {
+        sounds.levelUp();
+    }
+}
+
+// Calculate distance between two points
+function distBetweenPoints(x1, y1, x2, y2) {
+    return Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y1 - y2, 2));
+}
+
+// Draw the ship
+function drawShip(x, y, angle) {
+    if (isModernStyle) {
+        // Modern ship
+        ctx.strokeStyle = MODERN_COLORS.shipOutline;
+        ctx.lineWidth = SHIP_SIZE / 15;
+        ctx.fillStyle = MODERN_COLORS.ship;
+        
+        // Draw the ship body
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Draw engine glow
+        if (ship.thrusting) {
+            ctx.fillStyle = MODERN_COLORS.thrust.inner;
+            
+            // Draw the flame
+            ctx.beginPath();
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (5/3 * Math.cos(angle)),
+                y + ship.radius * (5/3 * Math.sin(angle))
+            );
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.fill();
+            
+            // Engine glow effect
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = MODERN_COLORS.thrust.glow;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(
+                x - ship.radius * Math.cos(angle),
+                y + ship.radius * Math.sin(angle),
+                ship.radius * 0.6,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+        
+        // Draw shield while invulnerable
+        if (ship.blinkNum > 0) {
+            ctx.strokeStyle = MODERN_COLORS.shield.border;
+            ctx.lineWidth = SHIP_SIZE / 15;
+            ctx.globalAlpha = 0.7;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.2, 0, Math.PI * 2);
+            ctx.stroke();
+            // Shield bubble
+            ctx.fillStyle = MODERN_COLORS.shield.color;
+            ctx.globalAlpha = 0.2;
+            ctx.beginPath();
+            ctx.arc(x, y, ship.radius * 1.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        // Classic ship
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = SHIP_SIZE / 20;
+        
+        // Nose of the ship
+        ctx.beginPath();
+        ctx.moveTo(
+            x + 4/3 * ship.radius * Math.cos(angle), 
+            y - 4/3 * ship.radius * Math.sin(angle)
+        );
+        // Rear left
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) + Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) - Math.cos(angle))
+        );
+        // Rear right
+        ctx.lineTo(
+            x - ship.radius * (2/3 * Math.cos(angle) - Math.sin(angle)),
+            y + ship.radius * (2/3 * Math.sin(angle) + Math.cos(angle))
+        );
+        ctx.closePath();
+        ctx.stroke();
+        
+        // Draw the thruster
+        if (ship.thrusting) {
+            ctx.strokeStyle = "yellow";
+            ctx.beginPath();
+            // Rear center
+            ctx.moveTo(
+                x - ship.radius * (2/3 * Math.cos(angle)),
+                y + ship.radius * (2/3 * Math.sin(angle))
+            );
+            // Thruster left
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) + 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) - 0.5 * Math.cos(angle))
+            );
+            // Thruster right
+            ctx.lineTo(
+                x - ship.radius * (4/3 * Math.cos(angle) - 0.5 * Math.sin(angle)),
+                y + ship.radius * (4/3 * Math.sin(angle) + 0.5 * Math.cos(angle))
+            );
+            ctx.closePath();
+            ctx.stroke();
+        }
+    }
+}
+
+// Shoot a laser from the ship
+function shootLaser() {
+    // Check if we can shoot more lasers
+    if (lasers.length < LASER_MAX) {
+        // Regular shot
+        const laserSpeed = LASER_SPEED * (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0 ? 1.5 : 1);
+        
+        if (activePowerups[POWERUP_TYPES.TRIPLE_SHOT] > 0) {
+            // Triple shot - shoot three lasers at different angles
+            const spreadAngle = Math.PI / 16; // 11.25 degrees spread
+            
+            // Center laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Left laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle + spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle + spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle + spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle + spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+            
+            // Right laser
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle - spreadAngle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle - spreadAngle),
+                xv: laserSpeed * Math.cos(ship.angle - spreadAngle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle - spreadAngle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        } else {
+            // Regular single shot
+            lasers.push({
+                x: ship.x + 4/3 * ship.radius * Math.cos(ship.angle),
+                y: ship.y - 4/3 * ship.radius * Math.sin(ship.angle),
+                xv: laserSpeed * Math.cos(ship.angle) / FPS,
+                yv: -laserSpeed * Math.sin(ship.angle) / FPS,
+                dist: 0,
+                explodeTime: 0
+            });
+        }
+        
+        // Play laser sound
+        if (soundEnabled && sounds.laser) {
+            sounds.laser();
+        }
+        
+        // Allow rapid fire by not resetting the space key if that powerup is active
+        if (activePowerups[POWERUP_TYPES.RAPID_FIRE] > 0) {
+            // Set a shorter timeout before allowing next shot
+            setTimeout(() => {
+                keys.space = false;
+            }, 100); // 100ms delay for rapid fire
+        } else {
+            // Normal firing rate
+            keys.space = false;
+        }
+    }
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    
+    if (!gameOver) {
+        requestAnimationFrame(gameLoop);
+    }
+}
+
+// Start the game when the page loads
+window.onload = init;
+
+// Create a new ship
+function createShip() {
+    return {
+        x: canvas.width / 2,
+        y: canvas.height / 2,
+        radius: SHIP_SIZE / 2,
+        angle: 90 / 180 * Math.PI, // convert to radians
+        rotation: 0,
+        thrusting: false,
+        thrust: {
+            x: 0,
+            y: 0
+        },
+        exploding: false,
