@@ -699,8 +699,8 @@ function setupMusicLoop() {
                 osc.frequency.value = freq;
                 
                 // Create gain node with long fade in/out for smooth transitions
-                const gain = audioContext.createGain();
-                gain.gain.value = 0;
+                const gainNode = audioContext.createGain();
+                gainNode.gain.value = 0;
                 
                 // Volume based on octave
                 const maxVolume = [0.05, 0.03, 0.01][octave];
@@ -709,17 +709,17 @@ function setupMusicLoop() {
                 const fadeInTime = 1; // 1 second fade in
                 const fadeOutTime = 1; // 1 second fade out
                 
-                gain.gain.setValueAtTime(0, noteStart);
-                gain.gain.linearRampToValueAtTime(maxVolume, noteStart + fadeInTime);
-                gain.gain.setValueAtTime(maxVolume, noteStart + noteDuration - fadeOutTime);
-                gain.gain.linearRampToValueAtTime(0, noteStart + noteDuration);
+                gainNode.gain.setValueAtTime(0, noteStart);
+                gainNode.gain.linearRampToValueAtTime(maxVolume, noteStart + fadeInTime);
+                gainNode.gain.setValueAtTime(maxVolume, noteStart + noteDuration - fadeOutTime);
+                gainNode.gain.linearRampToValueAtTime(0, noteStart + noteDuration);
                 
                 // Add a little chorus/detune effect
                 osc.detune.value = (Math.random() * 10) - 5;
                 
                 // Connect nodes
-                osc.connect(gain);
-                gain.connect(audioContext.destination);
+                osc.connect(gainNode);
+                gainNode.connect(audioContext.destination);
                 
                 // Schedule playback
                 osc.start(audioContext.currentTime + noteStart);
@@ -2494,10 +2494,10 @@ function startGame() {
     lives = GAME_LIVES;
     gameOver = false;
     
-    // Update displays
-    scoreElement.textContent = score;
-    livesElement.textContent = lives;
-    levelElement.textContent = level + 1;
+    // Update displays - Add null checks
+    if (scoreElement) scoreElement.textContent = score;
+    if (livesElement) livesElement.textContent = lives;
+    if (levelElement) levelElement.textContent = level + 1;
     
     // Create ship and asteroids
     ship = createShip();
@@ -2509,8 +2509,8 @@ function startGame() {
     startScreen.classList.remove("active");
     
     // Set modern style based on checkbox
-    isModernStyle = startStyleToggle.checked;
-    styleToggle.checked = isModernStyle;
+    isModernStyle = startStyleToggle && startStyleToggle.checked;
+    if (styleToggle) styleToggle.checked = isModernStyle;
     
     // Update HUD visibility based on selected style
     updateHUDVisibility();
@@ -2977,6 +2977,9 @@ function initButtonHoverEffects() {
     const buttons = startScreen.querySelectorAll('button, .button');
     
     buttons.forEach(button => {
+        // Skip buttons without an ID
+        if (!button.id) return;
+        
         // Create hover effect data for this button
         buttonHoverEffects[button.id] = {
             particles: [],
@@ -2984,13 +2987,17 @@ function initButtonHoverEffects() {
             color: button.id === 'startButton' ? '#00ffff' : '#ffffff'
         };
         
-        // Add mouse event listeners
+        // Add mouse event listeners with safety checks
         button.addEventListener('mouseenter', () => {
-            buttonHoverEffects[button.id].hovered = true;
+            if (buttonHoverEffects[button.id]) {
+                buttonHoverEffects[button.id].hovered = true;
+            }
         });
         
         button.addEventListener('mouseleave', () => {
-            buttonHoverEffects[button.id].hovered = false;
+            if (buttonHoverEffects[button.id]) {
+                buttonHoverEffects[button.id].hovered = false;
+            }
         });
     });
 }
@@ -3001,7 +3008,7 @@ function updateButtonHoverEffects() {
         const effect = buttonHoverEffects[buttonId];
         const button = document.getElementById(buttonId);
         
-        if (!button) return;
+        if (!button || !effect) return;
         
         // If button is hovered, create particles
         if (effect.hovered) {
