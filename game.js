@@ -89,6 +89,7 @@ let levelAnnouncementActive = false;
 let levelAnnouncementTime = 0;
 const LEVEL_ANNOUNCEMENT_DURATION = 3.0; // seconds to show the level announcement
 let levelIndicatorPulse = 0; // For level indicator pulsing effect
+let screenShake = 0; // Screen shake intensity for visual effects
 
 // Enhanced splash screen variables
 let splashCanvas, splashCtx;
