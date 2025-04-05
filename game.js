@@ -2543,8 +2543,8 @@ function createLevelAnnouncementParticles() {
         const angle = Math.random() * Math.PI * 2;
         const distance = 50 + Math.random() * 50;
         
-        const x = centerX + Math.cos(angle) * distance;
-        const y = centerY + Math.sin(angle) * distance;
+        const x = centerX + Math.cos(angle) * distance * 0.2;
+        const y = centerY + Math.sin(angle) * distance * 0.1;
         
         // Velocity moving away from center
         const speed = 0.5 + Math.random() * 1;
@@ -2803,6 +2803,92 @@ function drawPowerups() {
             if (powerup.type === POWERUP_TYPES.SHIELD) {
                 // Shield icon
                 ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.beginPath();
+                ctx.arc(0, 0, powerup.radius * 0.6, 0, Math.PI * 2);
+                ctx.stroke();
+            } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
+                // Triple shot icon
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.beginPath();
+                ctx.moveTo(0, -powerup.radius * 0.5);
+                ctx.lineTo(-powerup.radius * 0.4, powerup.radius * 0.5);
+                ctx.lineTo(powerup.radius * 0.4, powerup.radius * 0.5);
+                ctx.closePath();
+                ctx.stroke();
+                
+                // Draw 3 small dots
+                const dotSize = powerup.radius * 0.15;
+                ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.beginPath();
+                ctx.arc(-powerup.radius * 0.3, 0, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(0, 0, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(powerup.radius * 0.3, 0, dotSize, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
+                // Rapid fire icon
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
+                ctx.beginPath();
+                ctx.moveTo(-powerup.radius * 0.2, -powerup.radius * 0.6);
+                ctx.lineTo(powerup.radius * 0.2, 0);
+                ctx.lineTo(-powerup.radius * 0.2, 0);
+                ctx.lineTo(powerup.radius * 0.2, powerup.radius * 0.6);
+                ctx.stroke();
+            } else {
+                // Extra life icon
+                ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+                const r = powerup.radius * 0.4;
+                ctx.beginPath();
+                ctx.moveTo(0, r * 0.8);
+                ctx.bezierCurveTo(r * 1.5, -r * 1.5, r * 3, 0, 0, r * 2);
+                ctx.bezierCurveTo(-r * 3, 0, -r * 1.5, -r * 1.5, 0, r * 0.8);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        } else {
+            // Retro style powerup
+            ctx.strokeStyle = "white";
+            
+            // Draw circle
+            ctx.beginPath();
+            ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
+            ctx.stroke();
+            
+            // Draw identifying letter based on powerup type
+            ctx.fillStyle = "white";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "bold " + powerup.radius + "px Arial";
+            
+            let letter = "";
+            if (powerup.type === POWERUP_TYPES.SHIELD) {
+                letter = "S";
+            } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
+                letter = "T";
+            } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
+                letter = "R";
+            } else {
+                letter = "L";
+            }
+            
+            ctx.fillText(letter, powerup.x, powerup.y);
+        }
+    }
+}
+
+// Activate a powerup
+function activatePowerup(type) {
+    // Reset timer if powerup already active
+    if (activePowerups[type]) {
+        activePowerups[type] = POWERUP_DURATION * FPS;
+        return;
+    }
+    
+    // Set powerup active
     activePowerups[type] = POWERUP_DURATION * FPS;
     
     // Apply immediate effects
