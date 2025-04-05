@@ -91,6 +91,14 @@ const LEVEL_ANNOUNCEMENT_DURATION = 3.0; // seconds to show the level announceme
 let levelIndicatorPulse = 0; // For level indicator pulsing effect
 let screenShake = 0; // Screen shake intensity for visual effects
 
+// Visual effects settings for modern rendering
+let visualEffects = {
+    nebulaBrightness: 0.5, // Default opacity for nebula background
+    hudGlowIntensity: 5,   // Default glow intensity for HUD elements
+    starTwinkleSpeed: 1.0, // Multiplier for star twinkling speed
+    explosionScale: 1.0    // Scale for explosion effects
+};
+
 // Enhanced splash screen variables
 let splashCanvas, splashCtx;
 let splashStars = [];
