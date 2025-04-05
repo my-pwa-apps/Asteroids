@@ -4702,67 +4702,7 @@ function createShip() {
     };
 }
 
-// Asteroid types for modern visualization
-const ASTEROID_TYPES = {
-    ROCKY: "rocky",
-    ICY: "icy",
-    METALLIC: "metallic"
-};
-
-// Modern style asteroid type colors
-const ASTEROID_TYPE_COLORS = {
-    rocky: {
-        large: {
-            fill: "#5a4f70",
-            outline: "#7777cc",
-            craters: "rgba(30, 30, 50, 0.4)"
-        },
-        medium: {
-            fill: "#6a5f80", 
-            outline: "#9999ee",
-            craters: "rgba(40, 40, 60, 0.4)"
-        },
-        small: {
-            fill: "#8a7f90",
-            outline: "#aaaaff",
-            craters: "rgba(50, 50, 70, 0.4)"
-        }
-    },
-    icy: {
-        large: {
-            fill: "#4f6e8c",
-            outline: "#77aadd",
-            craters: "rgba(200, 230, 255, 0.3)"
-        },
-        medium: {
-            fill: "#5f7e9c", 
-            outline: "#99ccff",
-            craters: "rgba(210, 240, 255, 0.3)"
-        },
-        small: {
-            fill: "#6f8eac",
-            outline: "#bbddff",
-            craters: "rgba(220, 250, 255, 0.3)"
-        }
-    },
-    metallic: {
-        large: {
-            fill: "#6b5836",
-            outline: "#aa8844",
-            craters: "rgba(60, 40, 20, 0.5)"
-        },
-        medium: {
-            fill: "#7b6846", 
-            outline: "#cc9955",
-            craters: "rgba(70, 50, 30, 0.5)"
-        },
-        small: {
-            fill: "#8b7856",
-            outline: "#ddaa66",
-            craters: "rgba(80, 60, 40, 0.5)"
-        }
-    }
-};
+// Using ASTEROID_TYPES and ASTEROID_TYPE_COLORS already defined at the top of the file
 
 // Modify createAsteroid to accept speed and jaggedness multipliers
 function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
@@ -5125,67 +5065,7 @@ function createShip() {
     };
 }
 
-// Asteroid types for modern visualization
-const ASTEROID_TYPES = {
-    ROCKY: "rocky",
-    ICY: "icy",
-    METALLIC: "metallic"
-};
-
-// Modern style asteroid type colors
-const ASTEROID_TYPE_COLORS = {
-    rocky: {
-        large: {
-            fill: "#5a4f70",
-            outline: "#7777cc",
-            craters: "rgba(30, 30, 50, 0.4)"
-        },
-        medium: {
-            fill: "#6a5f80", 
-            outline: "#9999ee",
-            craters: "rgba(40, 40, 60, 0.4)"
-        },
-        small: {
-            fill: "#8a7f90",
-            outline: "#aaaaff",
-            craters: "rgba(50, 50, 70, 0.4)"
-        }
-    },
-    icy: {
-        large: {
-            fill: "#4f6e8c",
-            outline: "#77aadd",
-            craters: "rgba(200, 230, 255, 0.3)"
-        },
-        medium: {
-            fill: "#5f7e9c", 
-            outline: "#99ccff",
-            craters: "rgba(210, 240, 255, 0.3)"
-        },
-        small: {
-            fill: "#6f8eac",
-            outline: "#bbddff",
-            craters: "rgba(220, 250, 255, 0.3)"
-        }
-    },
-    metallic: {
-        large: {
-            fill: "#6b5836",
-            outline: "#aa8844",
-            craters: "rgba(60, 40, 20, 0.5)"
-        },
-        medium: {
-            fill: "#7b6846", 
-            outline: "#cc9955",
-            craters: "rgba(70, 50, 30, 0.5)"
-        },
-        small: {
-            fill: "#8b7856",
-            outline: "#ddaa66",
-            craters: "rgba(80, 60, 40, 0.5)"
-        }
-    }
-};
+// Using ASTEROID_TYPES and ASTEROID_TYPE_COLORS already defined at the top of the file
 
 // Modify createAsteroid to accept speed and jaggedness multipliers
 function createAsteroid(x, y, size, speedMultiplier = 1, jaggednessMultiplier = 1) {
