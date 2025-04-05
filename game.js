@@ -1,6 +1,6 @@
 // Game constants
 const FPS = 60; // frames per second
-const FRICTION = 0.7; // friction coefficient (0 = no friction, 1 = lots of friction)
+const FRICTION = 7; // friction coefficient (0 = no friction, 1 = lots of friction)
 const SHIP_SIZE = 30; // ship height in pixels
 const SHIP_THRUST = 5; // acceleration of the ship in pixels per second per second
 const TURN_SPEED = 360; // turn speed in degrees per second
@@ -1310,7 +1310,11 @@ function update() {
         // Reset ship after explosion
         if (ship.explodeTime > SHIP_EXPLOSION_DUR) {
             lives--;
-            livesElement.textContent = lives;
+            
+            // Only update DOM element when not in modern style
+            if (!isModernStyle) {
+                livesElement.textContent = lives;
+            }
             
             if (lives === 0) {
                 handleGameOver();
@@ -1485,8 +1489,10 @@ function destroyAsteroid(index) {
         score += ASTEROID_POINTS_SML;
     }
     
-    // Update the score display
-    scoreElement.textContent = score;
+    // Update the score display - only update DOM element in retro mode
+    if (!isModernStyle) {
+        scoreElement.textContent = score;
+    }
     
     // Split the asteroid if it's large enough
     if (asteroid.radius > ASTEROID_SIZE / 8) {
@@ -2210,22 +2216,30 @@ function drawEnhancedHUD() {
     ctx.shadowColor = MODERN_COLORS.ui.highlight;
     ctx.shadowBlur = visualEffects.hudGlowIntensity;
     
-    // Draw HUD background
+    // Draw HUD background - adjust positions to prevent overlap
     const hudHeight = 40;
     const cornerRadius = 10;
+    const padding = 20; // Space between HUD elements
+    
+    // Calculate widths based on content
+    const scoreWidth = 150;
+    const levelWidth = 100;
+    const livesWidth = 150;
     
     // Top-left rounded rectangle for score
-    roundedRect(ctx, 10, 10, 150, hudHeight, cornerRadius);
+    roundedRect(ctx, 10, 10, scoreWidth, hudHeight, cornerRadius);
     ctx.fill();
     ctx.stroke();
     
-    // Top-center rounded rectangle for level
-    roundedRect(ctx, canvas.width/2 - 50, 10, 100, hudHeight, cornerRadius);
+    // Top-center rounded rectangle for level - ensure it's centered
+    const levelX = (canvas.width/2) - (levelWidth/2);
+    roundedRect(ctx, levelX, 10, levelWidth, hudHeight, cornerRadius);
     ctx.fill();
     ctx.stroke();
     
-    // Top-right rounded rectangle for lives
-    roundedRect(ctx, canvas.width - 160, 10, 150, hudHeight, cornerRadius);
+    // Top-right rounded rectangle for lives - ensure it doesn't overlap
+    const livesX = canvas.width - livesWidth - 10;
+    roundedRect(ctx, livesX, 10, livesWidth, hudHeight, cornerRadius);
     ctx.fill();
     ctx.stroke();
     
@@ -2260,11 +2274,15 @@ function drawEnhancedHUD() {
     ctx.fillStyle = '#ffffff';
     ctx.font = '16px "Russo One", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('LIVES', canvas.width - 145, 30);
     
-    // Draw ship icons for lives
+    // Position "LIVES" text appropriately in the lives container
+    ctx.fillText('LIVES', livesX + 15, 30);
+    
+    // Draw ship icons for lives with proper spacing
+    const shipIconsStartX = livesX + 70; // Adjust this value to position ship icons
+    const shipIconSpacing = 25;
     for (let i = 0; i < lives; i++) {
-        drawMiniShip(canvas.width - 90 + i * 25, 30);
+        drawMiniShip(shipIconsStartX + i * shipIconSpacing, 30);
     }
     
     ctx.restore();
@@ -2479,6 +2497,7 @@ function startGame() {
     // Update displays
     scoreElement.textContent = score;
     livesElement.textContent = lives;
+    levelElement.textContent = level + 1;
     
     // Create ship and asteroids
     ship = createShip();
@@ -2492,6 +2511,9 @@ function startGame() {
     // Set modern style based on checkbox
     isModernStyle = startStyleToggle.checked;
     styleToggle.checked = isModernStyle;
+    
+    // Update HUD visibility based on selected style
+    updateHUDVisibility();
     
     if (isModernStyle) {
         preRenderAsteroids();
@@ -2791,7 +2813,11 @@ function activatePowerup(type) {
     } else if (type === POWERUP_TYPES.EXTRA_LIFE) {
         // Add extra life
         lives++;
-        livesElement.textContent = lives;
+        
+        // Only update DOM element when not in modern style
+        if (!isModernStyle) {
+            livesElement.textContent = lives;
+        }
         
         // No need to keep timer for this one-time effect
         activePowerups[type] = 0;
@@ -2830,6 +2856,19 @@ function init() {
     
     // Initialize splash screen
     initSplashScreen();
+    
+    // Setup HUD visibility based on initial style
+    updateHUDVisibility();
+}
+
+// Add function to update HUD visibility based on style
+function updateHUDVisibility() {
+    const domHUD = document.getElementById("hud");
+    if (domHUD) {
+        // Hide DOM HUD in modern style (using canvas HUD)
+        // Show DOM HUD in retro style
+        domHUD.style.display = isModernStyle ? "none" : "flex";
+    }
 }
 
 // Initialize splash screen with animated elements
@@ -3411,7 +3450,14 @@ function setupEventListeners() {
     
     // Style toggle
     document.getElementById('styleToggle').addEventListener('change', (e) => {
-        modernStyle = e.target.checked;
+        isModernStyle = e.target.checked;
+        updateHUDVisibility();
+    });
+    
+    document.getElementById('startStyleToggle').addEventListener('change', (e) => {
+        isModernStyle = e.target.checked;
+        document.getElementById('styleToggle').checked = isModernStyle;
+        // No need to update HUD visibility here as game hasn't started yet
     });
     
     // Sound controls
