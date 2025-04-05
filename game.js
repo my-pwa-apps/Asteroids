@@ -979,39 +979,95 @@ function drawAsteroid(asteroid) {
         const bufferKey = `${size}-${asteroid.type || ASTEROID_TYPES.ROCKY}`;
         
         if (asteroidBuffers[bufferKey]) {
-            // Draw the pre-rendered asteroid with rotation
+            // Draw the pre-rendered asteroid with rotation and enhanced effects
             ctx.save();
             ctx.translate(asteroid.x, asteroid.y);
             ctx.rotate(asteroid.angle);
+            
+            // Draw base asteroid image
             ctx.drawImage(
-                asteroidBuffers[bufferKey].canvas, 
+                asteroidBuffers[bufferKey].canvas,
                 -asteroidBuffers[bufferKey].canvas.width/2, 
                 -asteroidBuffers[bufferKey].canvas.height/2
             );
+            
+            // Add type-specific enhanced effects
+            if (asteroid.type === ASTEROID_TYPES.ICY) {
+                // Add crystalline reflection
+                ctx.globalCompositeOperation = "lighter";
+                ctx.globalAlpha = 0.2 + Math.sin(Date.now() / 1000) * 0.1;
+                
+                // Create reflection gradient
+                const reflectionGradient = ctx.createLinearGradient(
+                    -asteroid.radius/2, -asteroid.radius/2,
+                    asteroid.radius/2, asteroid.radius/2
+                );
+                reflectionGradient.addColorStop(0, "rgba(200, 230, 255, 0.6)");
+                reflectionGradient.addColorStop(0.5, "rgba(150, 200, 255, 0.2)");
+                reflectionGradient.addColorStop(1, "rgba(100, 150, 255, 0)");
+                
+                ctx.fillStyle = reflectionGradient;
+                ctx.fillRect(-asteroid.radius, -asteroid.radius, asteroid.radius*2, asteroid.radius*2);
+                ctx.globalCompositeOperation = "source-over";
+                ctx.globalAlpha = 1;
+            } 
+            else if (asteroid.type === ASTEROID_TYPES.METALLIC) {
+                // Add metallic shine
+                ctx.globalAlpha = 0.3;
+                
+                // Create shine gradient
+                const shinePos = Math.sin(Date.now() / 2000) * asteroid.radius * 0.5;
+                const shineGradient = ctx.createRadialGradient(
+                    shinePos, shinePos, 0,
+                    shinePos, shinePos, asteroid.radius
+                );
+                shineGradient.addColorStop(0, "rgba(255, 240, 200, 0.5)");
+                shineGradient.addColorStop(0.3, "rgba(255, 220, 150, 0.2)");
+                shineGradient.addColorStop(1, "rgba(0, 0, 0, 0)");
+                
+                ctx.fillStyle = shineGradient;
+                ctx.beginPath();
+                ctx.arc(shinePos, shinePos, asteroid.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+            
             ctx.restore();
             
-            // Add type-specific glow effects
+            // Add atmospheric glow around asteroid
             ctx.save();
             ctx.globalAlpha = asteroid.glowIntensity || 0.1;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = 15;
+            
             if (asteroid.type === ASTEROID_TYPES.ICY) {
                 ctx.shadowColor = "rgba(100, 150, 255, 0.8)";
+                const glowGradient = ctx.createRadialGradient(
+                    asteroid.x, asteroid.y, asteroid.radius * 0.9,
+                    asteroid.x, asteroid.y, asteroid.radius * 1.3
+                );
+                glowGradient.addColorStop(0, "rgba(100, 150, 255, 0.2)");
+                glowGradient.addColorStop(1, "rgba(100, 150, 255, 0)");
+                
+                ctx.fillStyle = glowGradient;
+                ctx.beginPath();
+                ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 1.3, 0, Math.PI * 2);
+                ctx.fill();
+            } 
+            else if (asteroid.type === ASTEROID_TYPES.METALLIC) {
+                ctx.shadowColor = "rgba(255, 200, 100, 0.6)";
+                const glowGradient = ctx.createRadialGradient(
+                    asteroid.x, asteroid.y, asteroid.radius * 0.8,
+                    asteroid.x, asteroid.y, asteroid.radius * 1.1
+                );
+                glowGradient.addColorStop(0, "rgba(255, 200, 100, 0.1)");
+                glowGradient.addColorStop(1, "rgba(255, 200, 100, 0)");
+                
+                ctx.fillStyle = glowGradient;
                 ctx.beginPath();
                 ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 1.1, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(100, 150, 255, 0.1)";
                 ctx.fill();
-            } else if (asteroid.type === ASTEROID_TYPES.METALLIC) {
-                ctx.shadowColor = "rgba(255, 200, 100, 0.6)";
-                ctx.beginPath();
-                ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 1.05, 0, Math.PI * 2);
-                ctx.fillStyle = "rgba(255, 200, 100, 0.05)";
-                ctx.fill();
-            } else {
-                ctx.shadowColor = "rgba(150, 120, 200, 0.4)";
             }
-            ctx.beginPath();
-            ctx.arc(asteroid.x, asteroid.y, asteroid.radius * 0.9, 0, Math.PI * 2);
-            ctx.closePath();
+            
             ctx.restore();
         } else {
             // Fallback to direct drawing if buffer not available
@@ -1088,20 +1144,54 @@ function drawLasers() {
     for (let i = 0; i < lasers.length; i++) {
         if (lasers[i].explodeTime === 0) {
             if (isModernStyle) {
-                // Modern laser with glow
+                // Set up shadow for glow effect
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = MODERN_COLORS.laser.glow;
                 
+                // Create a gradient for the laser beam
+                const laserGradient = ctx.createRadialGradient(
+                    lasers[i].x, lasers[i].y, 0,
+                    lasers[i].x, lasers[i].y, SHIP_SIZE / 8
+                );
+                laserGradient.addColorStop(0, "#ffffff");
+                laserGradient.addColorStop(0.3, MODERN_COLORS.laser.core);
+                laserGradient.addColorStop(0.7, MODERN_COLORS.laser.glow);
+                laserGradient.addColorStop(1, "rgba(255, 100, 255, 0)");
+                
                 // Draw outer glow
-                ctx.fillStyle = MODERN_COLORS.laser.glow;
+                ctx.fillStyle = laserGradient;
                 ctx.beginPath();
                 ctx.arc(lasers[i].x, lasers[i].y, SHIP_SIZE / 8, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Draw inner core
-                ctx.fillStyle = MODERN_COLORS.laser.core;
+                // Draw motion blur trail
+                ctx.globalAlpha = 0.4;
+                ctx.fillStyle = MODERN_COLORS.laser.trail;
                 ctx.beginPath();
-                ctx.arc(lasers[i].x, lasers[i].y, SHIP_SIZE / 15, 0, Math.PI * 2);
+                
+                // Calculate trail points based on velocity
+                const trailLength = Math.sqrt(Math.pow(lasers[i].xv, 2) + Math.pow(lasers[i].yv, 2)) * 0.8;
+                const angle = Math.atan2(-lasers[i].yv, -lasers[i].xv);
+                
+                ctx.moveTo(lasers[i].x, lasers[i].y);
+                ctx.lineTo(
+                    lasers[i].x + Math.cos(angle + 0.3) * trailLength,
+                    lasers[i].y + Math.sin(angle + 0.3) * trailLength
+                );
+                ctx.lineTo(
+                    lasers[i].x + Math.cos(angle - 0.3) * trailLength,
+                    lasers[i].y + Math.sin(angle - 0.3) * trailLength
+                );
+                ctx.closePath();
+                ctx.fill();
+                
+                // Reset opacity
+                ctx.globalAlpha = 1.0;
+                
+                // Draw inner core (brighter center)
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(lasers[i].x, lasers[i].y, SHIP_SIZE / 20, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.shadowBlur = 0;
             } else {
@@ -1114,26 +1204,68 @@ function drawLasers() {
         } else {
             // Draw the explosion
             if (isModernStyle) {
-                // Modern explosion
+                // Calculate explosion parameters
                 const explosionProgress = lasers[i].explodeTime / LASER_EXPLODE_DUR;
                 const radius = ship.radius * 0.75 * (0.75 + 0.5 * explosionProgress);
                 
-                // Create a radial gradient for the explosion
-                const gradient = ctx.createRadialGradient(
-                    lasers[i].x, lasers[i].y, 0,
+                // Create detailed explosion with multi-layered gradients
+                // Outer explosion gradient
+                const outerGradient = ctx.createRadialGradient(
+                    lasers[i].x, lasers[i].y, radius * 0.5,
                     lasers[i].x, lasers[i].y, radius
                 );
-                gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
-                gradient.addColorStop(0.3, "rgba(255, 255, 0, 0.8)");
-                gradient.addColorStop(0.7, "rgba(255, 100, 0, 0.5)");
-                gradient.addColorStop(1, "rgba(255, 0, 0, 0)");
+                outerGradient.addColorStop(0, "rgba(255, 200, 100, 0.7)");
+                outerGradient.addColorStop(0.5, "rgba(255, 100, 0, 0.5)");
+                outerGradient.addColorStop(1, "rgba(100, 0, 0, 0)");
                 
-                ctx.fillStyle = gradient;
+                // Inner explosion gradient
+                const innerGradient = ctx.createRadialGradient(
+                    lasers[i].x, lasers[i].y, 0,
+                    lasers[i].x, lasers[i].y, radius * 0.5
+                );
+                innerGradient.addColorStop(0, "rgba(255, 255, 255, 1.0)");
+                innerGradient.addColorStop(0.3, "rgba(255, 255, 150, 0.9)");
+                innerGradient.addColorStop(1, "rgba(255, 200, 0, 0.5)");
+                
+                // Draw shockwave
+                ctx.globalAlpha = (1 - explosionProgress) * 0.7;
+                ctx.strokeStyle = "rgba(255, 200, 100, 0.8)";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(lasers[i].x, lasers[i].y, radius * (0.8 + explosionProgress * 0.5), 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Reset alpha
+                ctx.globalAlpha = 1.0;
+                
+                // Draw outer explosion
+                ctx.fillStyle = outerGradient;
                 ctx.beginPath();
                 ctx.arc(lasers[i].x, lasers[i].y, radius, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Add some explosion particles
+                // Draw inner explosion
+                ctx.fillStyle = innerGradient;
+                ctx.beginPath();
+                ctx.arc(lasers[i].x, lasers[i].y, radius * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Add highlights
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = "#ffffff";
+                ctx.beginPath();
+                ctx.arc(
+                    lasers[i].x + radius * 0.2, 
+                    lasers[i].y - radius * 0.2, 
+                    radius * 0.1, 
+                    0, Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Reset alpha
+                ctx.globalAlpha = 1.0;
+                
+                // Add particles
                 if (explosionProgress < 0.3 && PARTICLES.enabled) {
                     const particleCount = 3;
                     for (let j = 0; j < particleCount; j++) {
@@ -1552,39 +1684,9 @@ function draw() {
             drawShip(ship.x, ship.y, ship.angle);
         }
     } else {
-        // Draw explosion
+        // Draw explosion - use enhanced version for modern style
         if (isModernStyle) {
-            // Modern explosion
-            const explosionProgress = ship.explodeTime / SHIP_EXPLOSION_DUR;
-            
-            // Create a radial gradient for the explosion
-            const gradient = ctx.createRadialGradient(
-                ship.x, ship.y, 0,
-                ship.x, ship.y, ship.radius * (1.7 + explosionProgress)
-            );
-            gradient.addColorStop(0, "rgba(255, 255, 255, 1)");
-            gradient.addColorStop(0.2, "rgba(255, 255, 0, 0.8)");
-            gradient.addColorStop(0.4, "rgba(255, 100, 0, 0.6)");
-            gradient.addColorStop(0.7, "rgba(255, 0, 0, 0.4)");
-            gradient.addColorStop(1, "rgba(100, 0, 0, 0)");
-            
-            ctx.fillStyle = gradient;
-            ctx.beginPath();
-            ctx.arc(ship.x, ship.y, ship.radius * (1.7 + explosionProgress), 0, Math.PI * 2);
-            ctx.fill();
-            
-            // Create explosion particles if not already created
-            if (explosionProgress < 0.2 && PARTICLES.enabled) {
-                // Only create particles once at the beginning of the explosion
-                createExplosion(
-                    ship.x, ship.y,
-                    ship.radius * 2,
-                    PARTICLES.count.shipExplosion,
-                    MODERN_COLORS.explosion,
-                    PARTICLES.duration.shipExplosion,
-                    1.5
-                );
-            }
+            drawShipExplosion();
         } else {
             // Retro explosion
             ctx.fillStyle = "darkred";
@@ -2624,7 +2726,7 @@ function createPowerup(x, y) {
     };
 }
 
-// Draw powerups
+// Draw powerups with enhanced effects
 function drawPowerups() {
     ctx.lineWidth = SHIP_SIZE / 20;
     
@@ -2649,160 +2751,58 @@ function drawPowerups() {
         }
 
         if (isModernStyle) {
-            // Modern style powerup
-            ctx.fillStyle = color;
-            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
-            
-            // Draw glow effect
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = glowColor;
-            ctx.beginPath();
-            ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.stroke();
-            
-            // Draw icon based on powerup type
-            ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+            // Save context for transformations
             ctx.save();
             ctx.translate(powerup.x, powerup.y);
             ctx.rotate(powerup.angle);
             
+            // Pulse effect
+            const pulse = 1 + Math.sin(Date.now() / 200) * 0.1;
+            
+            // Create gradient for powerup body
+            const powerupGradient = ctx.createRadialGradient(
+                0, 0, 0,
+                0, 0, powerup.radius * pulse
+            );
+            
+            // Customize gradient based on powerup type
             if (powerup.type === POWERUP_TYPES.SHIELD) {
-                // Shield icon
-                ctx.beginPath();
-                ctx.arc(0, 0, powerup.radius * 0.6, 0, Math.PI * 2);
-                ctx.stroke();
+                powerupGradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+                powerupGradient.addColorStop(0.4, "rgba(100, 200, 255, 0.7)");
+                powerupGradient.addColorStop(1, "rgba(0, 100, 255, 0.5)");
             } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
-                // Triple shot icon
-                ctx.beginPath();
-                ctx.moveTo(0, -powerup.radius * 0.5);
-                ctx.lineTo(-powerup.radius * 0.4, powerup.radius * 0.5);
-                ctx.lineTo(powerup.radius * 0.4, powerup.radius * 0.5);
-                ctx.closePath();
-                ctx.stroke();
-                
-                // Draw 3 small dots
-                const dotSize = powerup.radius * 0.15;
-                ctx.beginPath();
-                ctx.arc(-powerup.radius * 0.3, 0, dotSize, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(0, 0, dotSize, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.beginPath();
-                ctx.arc(powerup.radius * 0.3, 0, dotSize, 0, Math.PI * 2);
-                ctx.fill();
+                powerupGradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+                powerupGradient.addColorStop(0.4, "rgba(255, 150, 255, 0.7)");
+                powerupGradient.addColorStop(1, "rgba(200, 0, 200, 0.5)");
             } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
-                // Rapid fire icon (lightning bolt)
-                ctx.beginPath();
-                ctx.moveTo(-powerup.radius * 0.2, -powerup.radius * 0.6);
-                ctx.lineTo(powerup.radius * 0.2, 0);
-                ctx.lineTo(-powerup.radius * 0.2, 0);
-                ctx.lineTo(powerup.radius * 0.2, powerup.radius * 0.6);
-                ctx.stroke();
+                powerupGradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+                powerupGradient.addColorStop(0.4, "rgba(255, 255, 0, 0.7)");
+                powerupGradient.addColorStop(1, "rgba(255, 150, 0, 0.5)");
             } else {
-                // Extra life icon (heart)
-                const r = powerup.radius * 0.4;
-                ctx.beginPath();
-                ctx.moveTo(0, r * 0.8);
-                ctx.bezierCurveTo(r * 1.5, -r * 1.5, r * 3, 0, 0, r * 2);
-                ctx.bezierCurveTo(-r * 3, 0, -r * 1.5, -r * 1.5, 0, r * 0.8);
-                ctx.fill();
+                powerupGradient.addColorStop(0, "rgba(255, 255, 255, 0.9)");
+                powerupGradient.addColorStop(0.4, "rgba(150, 255, 150, 0.7)");
+                powerupGradient.addColorStop(1, "rgba(0, 200, 0, 0.5)");
             }
             
-            ctx.restore();
-            ctx.shadowBlur = 0;
-        } else {
-            // Retro style powerup
-            ctx.strokeStyle = "white";
-            
-            // Draw circle
+            // Draw glow effect
+            ctx.shadowBlur = 15 * pulse;
+            ctx.shadowColor = glowColor;
+            ctx.fillStyle = powerupGradient;
             ctx.beginPath();
-            ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI * 2);
+            ctx.arc(0, 0, powerup.radius * pulse, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw outer ring with pulsing effect
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.8)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, 0, powerup.radius * pulse, 0, Math.PI * 2);
             ctx.stroke();
             
-            // Draw identifying letter based on powerup type
-            ctx.fillStyle = "white";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.font = "bold " + powerup.radius + "px Arial";
-            
-            let letter = "";
+            // Draw icon based on powerup type with enhanced effects
             if (powerup.type === POWERUP_TYPES.SHIELD) {
-                letter = "S";
-            } else if (powerup.type === POWERUP_TYPES.TRIPLE_SHOT) {
-                letter = "T";
-            } else if (powerup.type === POWERUP_TYPES.RAPID_FIRE) {
-                letter = "R";
-            } else {
-                letter = "L";
-            }
-            
-            ctx.fillText(letter, powerup.x, powerup.y);
-        }
-    }
-}
-
-// Update powerups
-function updatePowerups() {
-    // Update existing powerup positions
-    for (let i = powerups.length - 1; i >= 0; i--) {
-        // Move the powerup
-        powerups[i].x += powerups[i].xv;
-        powerups[i].y += powerups[i].yv;
-        
-        // Update rotation for visual effect
-        powerups[i].angle += powerups[i].rotation;
-        
-        // Handle powerup going off screen with wrapping
-        if (powerups[i].x < 0 - powerups[i].radius) {
-            powerups[i].x = canvas.width + powerups[i].radius;
-        } else if (powerups[i].x > canvas.width + powerups[i].radius) {
-            powerups[i].x = 0 - powerups[i].radius;
-        }
-        if (powerups[i].y < 0 - powerups[i].radius) {
-            powerups[i].y = canvas.height + powerups[i].radius;
-        } else if (powerups[i].y > canvas.height + powerups[i].radius) {
-            powerups[i].y = 0 - powerups[i].radius;
-        }
-        
-        // Check for collision with ship if not exploding
-        if (!ship.exploding && detectCollision(ship, powerups[i])) {
-            // Apply powerup effect
-            activatePowerup(powerups[i].type);
-            
-            // Remove the powerup
-            powerups.splice(i, 1);
-            
-            // Play powerup sound
-            if (soundEnabled) {
-                sounds.extraLife();
-            }
-        }
-    }
-    
-    // Update active powerup timers
-    for (let type in activePowerups) {
-        if (activePowerups[type] > 0) {
-            activePowerups[type]--;
-            
-            // Deactivate powerup when time runs out
-            if (activePowerups[type] <= 0) {
-                deactivatePowerup(type);
-            }
-        }
-    }
-}
-
-// Activate a powerup
-function activatePowerup(type) {
-    // Reset timer if powerup already active
-    if (activePowerups[type]) {
-        activePowerups[type] = POWERUP_DURATION * FPS;
-        return;
-    }
-    
-    // Set powerup active
+                // Shield icon
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.9)";
     activePowerups[type] = POWERUP_DURATION * FPS;
     
     // Apply immediate effects
