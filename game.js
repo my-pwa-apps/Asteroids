@@ -3610,12 +3610,7 @@ function createShip() {
     };
 }
 
-// Asteroid types for modern visualization
-const ASTEROID_TYPES = {
-    ROCKY: "rocky",
-    ICY: "icy",
-    METALLIC: "metallic"
-};
+// Removed duplicate declaration of ASTEROID_TYPES at line 4037
 
 // Modern style asteroid type colors
 const ASTEROID_TYPE_COLORS = {
